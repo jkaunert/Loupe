@@ -1,0 +1,58 @@
+import Foundation
+
+public struct LoupePoint: Codable, Equatable {
+    public var x: Double
+    public var y: Double
+
+    public init(x: Double, y: Double) {
+        self.x = x
+        self.y = y
+    }
+}
+
+public struct LoupeSize: Codable, Equatable {
+    public var width: Double
+    public var height: Double
+
+    public init(width: Double, height: Double) {
+        self.width = width
+        self.height = height
+    }
+}
+
+public struct LoupeRect: Codable, Equatable {
+    public var x: Double
+    public var y: Double
+    public var width: Double
+    public var height: Double
+
+    public init(x: Double, y: Double, width: Double, height: Double) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
+
+    public var maxX: Double { x + width }
+    public var maxY: Double { y + height }
+    public var isEmpty: Bool { width <= 0 || height <= 0 }
+
+    public func intersects(_ other: LoupeRect) -> Bool {
+        guard !isEmpty, !other.isEmpty else { return false }
+        return x < other.maxX && maxX > other.x && y < other.maxY && maxY > other.y
+    }
+}
+
+public struct LoupeColor: Codable, Equatable {
+    public var red: Double
+    public var green: Double
+    public var blue: Double
+    public var alpha: Double
+
+    public init(red: Double, green: Double, blue: Double, alpha: Double) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+        self.alpha = alpha
+    }
+}
