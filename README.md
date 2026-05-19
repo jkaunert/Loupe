@@ -108,6 +108,9 @@ recordings are preserved unless explicitly requested.
 scripts/verify-agent-work.sh
 ```
 
+GitHub Actions runs the same command as the `Post-change E2E` check for pull
+requests and `main` pushes.
+
 ## Docs
 
 - [Status](Docs/Status.md)

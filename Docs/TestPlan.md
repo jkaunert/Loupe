@@ -13,7 +13,8 @@ Agents should run the repository-level verification command after code changes:
 scripts/verify-agent-work.sh
 ```
 
-That command is the default post-work gate. It runs:
+That command is the default post-work gate and the `Post-change E2E` GitHub
+Actions required check. It runs:
 
 - `swift test`
 - `swift build --configuration release --disable-sandbox --product loupe`

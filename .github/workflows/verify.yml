@@ -1,0 +1,40 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  post-change-e2e:
+    name: Post-change E2E
+    runs-on: macos-26
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Print toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+          xcrun simctl list devices available
+
+      - name: Run post-change harness
+        run: scripts/verify-agent-work.sh
+
+      - name: Upload Loupe diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loupe-diagnostics
+          if-no-files-found: ignore
+          path: |
+            /tmp/loupe-*
