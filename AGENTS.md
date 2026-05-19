@@ -38,8 +38,17 @@ Use this file as a map, not as a full manual. Keep deeper project state in
   then query or inspect specific refs on demand.
 ## Verification
 
-Run the fast SwiftPM tests. Core unit tests use Swift Testing (`import Testing`,
-`@Test`, `#expect`, `#require`), not XCTest:
+After code changes, run the repository post-change harness before handing work
+back unless the user explicitly scopes verification down or local simulator
+state blocks E2E. It includes SwiftPM tests, release CLI build, and the
+XCTest-free runtime E2E scripts:
+
+```bash
+scripts/verify-agent-work.sh
+```
+
+For narrower debugging, run the individual checks below. Core unit tests use
+Swift Testing (`import Testing`, `@Test`, `#expect`, `#require`), not XCTest:
 
 ```bash
 swift test

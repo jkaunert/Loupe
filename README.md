@@ -105,8 +105,7 @@ recordings are preserved unless explicitly requested.
 ## Verify
 
 ```bash
-swift test
-Examples/LoupeExample/run-bookmark-e2e.sh
+scripts/verify-agent-work.sh
 ```
 
 ## Docs

@@ -217,10 +217,11 @@ echo "case: bookmark creation form by selector tap and type"
 .build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --test-id bookmark.add --expect-visible bookmark.editor
 .build/debug/loupe wait-for-visible --host "$HOST" --test-id bookmark.editor --timeout 5 >/tmp/loupe-bookmark-wait-editor.json
 .build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --test-id bookmark.editor.title
-.build/debug/loupe type "Codex Notes" --udid "$DEVICE"
+CREATED_TITLE="20260519"
+.build/debug/loupe type "$CREATED_TITLE" --udid "$DEVICE"
 fetch_snapshot
 .build/debug/loupe inspect "$SNAPSHOT_PATH" --test-id bookmark.editor.title > "$INSPECT_PATH"
-grep -q '"text" : "Codex Notes"' "$INSPECT_PATH"
+grep -q "\"text\" : \"$CREATED_TITLE\"" "$INSPECT_PATH"
 .build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --test-id bookmark.editor.save
 .build/debug/loupe wait-for-gone --host "$HOST" --test-id bookmark.editor --timeout 5 >/tmp/loupe-bookmark-wait-editor-gone.json
 .build/debug/loupe wait-for-visible --host "$HOST" --test-id bookmark.item.created --timeout 5 >/tmp/loupe-bookmark-wait-created.json
@@ -246,15 +247,15 @@ echo "case: bookmark search tab"
 .build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --test-id bookmark.tab.search
 .build/debug/loupe wait-for-visible --host "$HOST" --test-id bookmark.search --timeout 5 >/tmp/loupe-bookmark-wait-search.json
 .build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --test-id bookmark.search.field
-.build/debug/loupe type "WebKit" --udid "$DEVICE"
-.build/debug/loupe wait-for-visible --host "$HOST" --test-id bookmark.item.webkit --timeout 5 >/tmp/loupe-bookmark-wait-search-result.json
+.build/debug/loupe type "$CREATED_TITLE" --udid "$DEVICE"
+.build/debug/loupe wait-for-visible --host "$HOST" --test-id bookmark.item.created --timeout 5 >/tmp/loupe-bookmark-wait-search-result.json
 fetch_snapshot
 assert_query bookmark.search /tmp/loupe-bookmark-search-query.json
-assert_query bookmark.item.webkit /tmp/loupe-bookmark-search-result-query.json
+assert_query bookmark.item.created /tmp/loupe-bookmark-search-result-query.json
 
 echo "case: bookmark layout audit and runtime stability"
 .build/debug/loupe fetch "$HOST/observation" --timeout 5 --output "$OBSERVATION_PATH"
-grep -q '"bookmark.item.webkit"' "$OBSERVATION_PATH"
+grep -q '"bookmark.item.created"' "$OBSERVATION_PATH"
 .build/debug/loupe audit "$SNAPSHOT_PATH" > "$AUDIT_PATH"
 grep -q '"issueCount"' "$AUDIT_PATH"
 .build/debug/loupe runtime --host "$HOST" --udid "$DEVICE" --timeout 5 >/tmp/loupe-bookmark-runtime-after.json

@@ -385,6 +385,7 @@ int LoupeHIDType(const char *udid, const char *text, char **errorMessage)
             if (event.shift) {
                 LoupeHIDSendKey(client, functions.keyboardMessage, 225, LoupeHIDDirectionUp);
             }
+            usleep(20 * 1000);
         }
         usleep(25 * 1000);
         return 0;

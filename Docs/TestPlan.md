@@ -5,6 +5,25 @@ observe the app, act through the simulator, inspect exact UIKit state on demand,
 and validate functional or design regressions without making XCTest the public
 harness.
 
+## Post-Change Harness
+
+Agents should run the repository-level verification command after code changes:
+
+```bash
+scripts/verify-agent-work.sh
+```
+
+That command is the default post-work gate. It runs:
+
+- `swift test`
+- `swift build --configuration release --disable-sandbox --product loupe`
+- `Examples/LoupeExample/run-runtime-e2e.sh`
+- `Examples/LoupeExample/run-native-scenarios.sh`
+- `Examples/LoupeExample/run-bookmark-e2e.sh`
+
+If local simulator state blocks E2E, record the failing script, exit status,
+and the generated `/tmp/loupe-*` logs or screenshots before handing work back.
+
 ## Implemented
 
 - Core unit tests use Swift Testing (`@Test`, `#expect`, `#require`).
