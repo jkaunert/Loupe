@@ -72,6 +72,4 @@ Loupe does not synthesize a SwiftUI view tree. SwiftUI elements are valid
 movement/input targets only when they are exposed through the accessibility tree.
 If a SwiftUI `.accessibilityIdentifier(...)` is not visible through the runtime
 accessibility tree, Loupe will not invent a selector for it from private SwiftUI
-implementation views. Recording follows the same rule: SwiftUI-backed view-tree
-nodes are skipped as replay selector candidates, while accessibility nodes remain
-eligible.
+implementation views.

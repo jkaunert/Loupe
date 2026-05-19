@@ -15,7 +15,7 @@ Use this file as a map, not as a full manual. Keep deeper project state in
 - `Sources/LoupeInjection`: simulator-only injected library that starts
   `LoupeServer`.
 - `Sources/LoupeCLI`: host CLI for fetch, compact, query, inspect, audit,
-  launch, doctor, runtime actions, recording, replay, and injector path lookup.
+  launch, doctor, runtime actions, and injector path lookup.
 - `Examples/LoupeExample`: UIKit simulator app used to prove injection,
   snapshotting, and coordinate resolution for UI actions.
 - `skills/loupe`: draft Codex skill for Loupe workflows.

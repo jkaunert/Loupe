@@ -82,14 +82,6 @@ loupe set --udid <UDID> --list
 context, and source candidates so an agent can decide the smallest matching code
 change.
 
-## Record
-
-```bash
-loupe record start checkout-flow --udid <UDID>
-loupe record stop --udid <UDID>
-loupe replay checkout-flow --udid <UDID> --width 438 --height 954
-```
-
 ## Maintenance
 
 ```bash
@@ -99,8 +91,7 @@ loupe cleanup
 ```
 
 `skills install` upserts the Loupe skill into existing Codex or Claude Code
-skill folders. `cleanup` removes stale runtime records and old trace bundles;
-recordings are preserved unless explicitly requested.
+skill folders. `cleanup` removes stale runtime records and old trace bundles.
 
 ## Verify
 

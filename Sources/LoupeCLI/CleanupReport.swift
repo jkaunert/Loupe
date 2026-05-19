@@ -5,5 +5,4 @@ import LoupeCore
 struct CleanupReport {
     var runtimeRecordsRemoved = 0
     var traceBundlesRemoved = 0
-    var recordingsRemoved = 0
 }

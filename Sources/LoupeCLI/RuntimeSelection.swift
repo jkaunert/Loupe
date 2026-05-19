@@ -6,10 +6,9 @@ extension LoupeCLI {
     static func runtimeFetch(
         _ arguments: [String],
         path: String,
-        usage: String,
-        allowsAlias: Bool = false
+        usage: String
     ) async throws {
-        let options = try RuntimeFetchOptions(arguments, usage: usage, allowsAlias: allowsAlias)
+        let options = try RuntimeFetchOptions(arguments, usage: usage)
         let data = try await runtimeData(path: path, options: options)
         try write(data: data, outputURL: options.outputURL)
     }
@@ -72,12 +71,7 @@ extension LoupeCLI {
         if let udid = options.udid {
             try await validateRuntimeIdentity(host: host, expectedUDID: udid, timeout: options.timeout)
         }
-        var url = host.appendingPathComponent(path.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
-        if let alias = options.alias {
-            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-            components?.queryItems = [URLQueryItem(name: "alias", value: alias)]
-            url = components?.url ?? url
-        }
+        let url = host.appendingPathComponent(path.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
         let (data, response) = try await httpData(from: url, timeout: options.timeout, label: "runtime fetch")
         guard let httpResponse = response as? HTTPURLResponse else {
             throw CLIError("runtime fetch expected an HTTP response")

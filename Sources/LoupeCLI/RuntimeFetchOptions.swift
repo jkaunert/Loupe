@@ -7,23 +7,19 @@ struct RuntimeFetchOptions {
     var hostWasExplicit: Bool
     var udid: String?
     var bundleID: String?
-    var alias: String?
     var outputURL: URL?
     var timeout: TimeInterval
 
-    init(_ arguments: [String], usage: String, allowsAlias: Bool = false) throws {
+    init(_ arguments: [String], usage: String) throws {
         host = URL(string: "http://127.0.0.1:8765")!
         hostWasExplicit = false
         var udid: String?
         var bundleID: String?
-        var alias: String?
         var outputURL: URL?
         var timeout: TimeInterval = 5
         var index = 0
         while index < arguments.count {
             switch arguments[index] {
-            case let value where allowsAlias && !value.hasPrefix("--") && alias == nil:
-                alias = value
             case "--host":
                 let raw = try Self.value(after: "--host", in: arguments, index: &index)
                 guard let url = URL(string: raw) else {
@@ -35,11 +31,6 @@ struct RuntimeFetchOptions {
                 udid = try Self.value(after: arguments[index], in: arguments, index: &index)
             case "--bundle-id":
                 bundleID = try Self.value(after: "--bundle-id", in: arguments, index: &index)
-            case "--alias", "--name":
-                guard allowsAlias else {
-                    throw CLIError("Unknown runtime option: \(arguments[index])")
-                }
-                alias = try Self.value(after: arguments[index], in: arguments, index: &index)
             case "--output":
                 outputURL = URL(fileURLWithPath: try Self.value(after: "--output", in: arguments, index: &index))
             case "--timeout":
@@ -53,7 +44,6 @@ struct RuntimeFetchOptions {
         }
         self.udid = udid
         self.bundleID = bundleID
-        self.alias = alias
         self.outputURL = outputURL
         guard timeout > 0 else {
             throw CLIError("--timeout must be greater than 0")

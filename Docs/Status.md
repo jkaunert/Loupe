@@ -80,28 +80,18 @@ compose.
 - `LoupeKit` snapshots synthesize `UITabBarItem` nodes from actual tab bar
   control frames, so tab identifiers such as `example.fixtures.tab.web` are
   selectable without relying on private class-name string matching.
-- `LoupeKit` exposes runtime endpoints for logs and touch recording:
-  `/logs`, `/runtime`, `/recording/start`, `/recording/stop`, and `/recording`.
+- `LoupeKit` exposes runtime endpoints for logs and identity:
+  `/logs` and `/runtime`.
 - `/runtime` includes a launch identity with bundle id, process id,
-  `SIMULATOR_UDID`, simulator name, and a Loupe launch id. Recordings persist
-  that identity as `appIdentity`.
-- Recordings can carry a user-facing `alias`, set with
-  `loupe record-start <alias>` or `loupe record-start --alias <alias>`.
-- Touch recording enriches began events with ranked selector candidates from
-  the accessibility tree and view tree. SwiftUI-backed view-tree nodes are not
-  used as replay selector candidates; SwiftUI movement/input is only selector
-  addressable when the element is exposed through accessibility. `loupe replay`
-  resolves recorded selectors in the current app state before falling back to
-  recorded coordinates.
+  `SIMULATOR_UDID`, simulator name, and a Loupe launch id.
 - Injected apps can send logs and extra view metadata without importing
   `LoupeKit` by posting `dev.loupe.log` and `dev.loupe.viewMetadata`
   notifications. See `Docs/RuntimeCommunication.md`.
-- `loupe tap`, `swipe`, `drag`, `pinch`, `type`, `screenshot`, `record-start`,
-  `record-stop`, `recording`, `logs`, and `replay` are available as CLI
-  commands.
-- `loupe runtime`, `logs`, `record-start`, `record-stop`, and `recording` accept
+- `loupe tap`, `swipe`, `drag`, `pinch`, `type`, `screenshot`, and `logs` are
+  available as CLI commands.
+- `loupe runtime` and `logs` accept
   `--udid` and validate that the connected Loupe host belongs to that simulator
-  before mutating or reading runtime recorder state.
+  before reading runtime state.
 - `loupe start` / `loupe launch --inject` assigns a stable per-simulator localhost port when
   `LOUPE_PORT` is not provided, records it under `~/.loupe/runtimes`, and waits
   for the injected runtime before returning. Later CLI commands can resolve the
@@ -124,7 +114,6 @@ compose.
 - `loupe start` wraps `loupe launch --inject` and starts the in-app Loupe
   runtime server without requiring users to think about `DYLD_INSERT_LIBRARIES`.
 - `loupe cleanup` removes stale runtime host records and old trace bundles.
-  Recordings are kept by default and pruned only when requested.
 - `loupe set` posts to the injected `/mutate` endpoint and can update
   allowlisted UIKit view properties such as frame, alpha, colors, text,
   accessibility fields, layer styling, and common control values.
@@ -155,8 +144,6 @@ compose.
   target node.
 - `loupe wait-for-gone` and `loupe wait-for-value` cover disappearance and
   nested property checks in addition to `wait-for-visible`.
-- `loupe record start <alias>`, `loupe record stop`, `loupe recordings`, and
-  `loupe replay <alias>` provide the alias-based recorder loop.
 - `Examples/LoupeExample/run-runtime-e2e.sh` verifies the XCTest-free runtime
   smoke path.
 - `Examples/LoupeExample/run-native-scenarios.sh` repeats native HID tap, gesture,

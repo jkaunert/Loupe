@@ -31,7 +31,7 @@ LoupeKit
   - exposes full node inspection and basic layout audit endpoints
   - exposes allowlisted runtime UIKit property mutation
   - exposes custom metadata
-  - exposes runtime logs and touch recording
+  - exposes runtime logs
   - serves snapshots over localhost transport
 
 LoupeInjector

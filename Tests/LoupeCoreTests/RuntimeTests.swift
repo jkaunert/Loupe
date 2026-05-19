@@ -3,60 +3,6 @@ import Testing
 @testable import LoupeCore
 
 struct RuntimeTests {
-    @Test func recordingRoundTripsThroughJSON() throws {
-        let identity = LoupeRuntimeIdentity(
-            launchID: "launch-1",
-            startedAt: Date(timeIntervalSince1970: 0),
-            bundleIdentifier: "dev.loupe.example",
-            processIdentifier: 123,
-            simulatorUDID: "SIM-1",
-            simulatorName: "iPhone"
-        )
-        let recording = LoupeRecording(
-            id: "recording-1",
-            alias: "checkout-flow",
-            startedAt: Date(timeIntervalSince1970: 1),
-            endedAt: Date(timeIntervalSince1970: 2),
-            appIdentity: identity,
-            events: [
-                LoupeRuntimeEvent(
-                    id: "event-1",
-                    kind: .touch,
-                    timestamp: Date(timeIntervalSince1970: 3),
-                    phase: .began,
-                    points: [LoupePoint(x: 10, y: 20)],
-                    targetCandidates: [
-                        LoupeRecordedTargetCandidate(
-                            tree: "accessibility",
-                            selector: LoupeRecordedSelector(kind: .testID, value: "checkout.pay"),
-                            ref: "ax-n1",
-                            sourceRef: "n1",
-                            role: "button",
-                            testID: "checkout.pay",
-                            text: "Pay",
-                            frame: LoupeRect(x: 0, y: 0, width: 100, height: 44),
-                            activationPoint: LoupePoint(x: 50, y: 22),
-                            score: 105
-                        )
-                    ]
-                )
-            ]
-        )
-
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(recording)
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let decoded = try decoder.decode(LoupeRecording.self, from: data)
-
-        #expect(decoded == recording)
-        #expect(decoded.alias == "checkout-flow")
-        #expect(decoded.appIdentity?.simulatorUDID == "SIM-1")
-        #expect(decoded.events.first?.targetCandidates.first?.selector.value == "checkout.pay")
-    }
-
     @Test func snapshotNodeCanCarryUIKitAndAccessibilityProperties() {
         let node = LoupeNode(
             ref: "n1",

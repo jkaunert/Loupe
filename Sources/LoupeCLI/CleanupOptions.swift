@@ -7,7 +7,6 @@ struct CleanupOptions {
     var pruneRuntimes: Bool
     var pruneTraces: Bool
     var tracesOlderThan: TimeInterval
-    var recordingsOlderThan: TimeInterval?
     var timeout: TimeInterval
 
     init(_ arguments: [String]) throws {
@@ -15,7 +14,6 @@ struct CleanupOptions {
         pruneRuntimes = true
         pruneTraces = true
         tracesOlderThan = 7 * 24 * 60 * 60
-        recordingsOlderThan = nil
         timeout = 1
 
         var index = 0
@@ -31,10 +29,6 @@ struct CleanupOptions {
                 tracesOlderThan = try Self.duration(after: "--traces-older-than", in: arguments, index: &index)
             case "--all-traces":
                 tracesOlderThan = 0
-            case "--recordings-older-than":
-                recordingsOlderThan = try Self.duration(after: "--recordings-older-than", in: arguments, index: &index)
-            case "--include-recordings":
-                recordingsOlderThan = 30 * 24 * 60 * 60
             case "--timeout":
                 timeout = try Self.double(after: "--timeout", in: arguments, index: &index)
             default:

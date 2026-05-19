@@ -115,7 +115,6 @@ sleep 2
 
 HOST="http://127.0.0.1:$PORT"
 SNAPSHOT_PATH="/tmp/loupe-runtime-snapshot.json"
-RECORDING_PATH="/tmp/loupe-runtime-recording.json"
 SCREENSHOT_PATH="/tmp/loupe-runtime-screen.png"
 RUNTIME_PATH="/tmp/loupe-runtime-state.json"
 
@@ -135,9 +134,6 @@ read -r WIDTH HEIGHT < <(ruby -rjson -e '
   puts [size.fetch("width"), size.fetch("height")].join(" ")
 ' "$SNAPSHOT_PATH")
 
-.build/debug/loupe record start customer-list-scroll --host "$HOST" --udid "$DEVICE" >/tmp/loupe-record-start.json
-grep -q '"alias" : "customer-list-scroll"' /tmp/loupe-record-start.json
-
 .build/debug/loupe drag \
   --udid "$DEVICE" \
   --from "$(ruby -e 'puts (ARGV.fetch(0).to_f / 2).round' "$WIDTH"),$(ruby -e 'puts (ARGV.fetch(0).to_f * 0.80).round' "$HEIGHT")" \
@@ -154,39 +150,7 @@ fetch_snapshot
   --udid "$DEVICE" \
   --output "$SCREENSHOT_PATH"
 
-.build/debug/loupe record stop \
-  --host "$HOST" \
-  --udid "$DEVICE" >/tmp/loupe-record-stop-path.txt
-SAVED_RECORDING_PATH="$(tail -1 /tmp/loupe-record-stop-path.txt)"
-cp "$SAVED_RECORDING_PATH" "$RECORDING_PATH"
-.build/debug/loupe recordings >/tmp/loupe-recordings-list.txt
-grep -q 'customer-list-scroll' /tmp/loupe-recordings-list.txt
-
-grep -q '"events"' "$RECORDING_PATH"
-grep -q '"kind" : "touch"' "$RECORDING_PATH"
-grep -q '"appIdentity"' "$RECORDING_PATH"
-grep -q '"simulatorUDID"' "$RECORDING_PATH"
-grep -q '"alias" : "customer-list-scroll"' "$RECORDING_PATH"
-grep -q '"targetCandidates"' "$RECORDING_PATH"
-grep -q '"selector"' "$RECORDING_PATH"
-
-terminate_app
-.build/debug/loupe launch \
-  --device "$DEVICE" \
-  --bundle-id dev.loupe.example \
-  --inject \
-  --env LOUPE_PORT="$PORT" >/dev/null
-sleep 2
-
-.build/debug/loupe replay customer-list-scroll \
-  --host "$HOST" \
-  --udid "$DEVICE" \
-  --width "$WIDTH" \
-  --height "$HEIGHT"
-.build/debug/loupe wait-for-visible --host "$HOST" --test-id example.customerList --timeout 5 >/tmp/loupe-runtime-replay-list.json
-
 echo "runtime E2E smoke passed"
 echo "runtime: $RUNTIME_PATH"
 echo "snapshot: $SNAPSHOT_PATH"
-echo "recording: $RECORDING_PATH"
 echo "screenshot: $SCREENSHOT_PATH"

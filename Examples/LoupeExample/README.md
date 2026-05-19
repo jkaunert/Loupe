@@ -44,9 +44,8 @@ Run the XCTest-free Loupe runtime smoke harness:
 ```
 
 This launches the injected app, verifies richer UIKit/accessibility snapshot
-fields, starts recording, performs a drag through the public Loupe action
-surface, captures a screenshot, stops recording, and verifies that touch events
-were recorded.
+fields, performs a drag through the public Loupe action surface, and captures a
+screenshot.
 
 Run the native HID scenario harness:
 

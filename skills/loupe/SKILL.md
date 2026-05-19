@@ -127,10 +127,6 @@ loupe tap --test-id checkout.payButton --udid booted --expect-visible checkout.c
 loupe drag --from 4,420 --to 360,420 --udid booted --duration 0.8
 loupe swipe --from 219,760 --to 219,190 --udid booted --width 438 --height 954
 loupe type "Ada" --udid booted
-loupe record start checkout-flow
-loupe record stop
-loupe recordings
-loupe replay checkout-flow --udid booted --width 438 --height 954
 ```
 
 They use Loupe's native host-side HID backend. If dispatch fails, use
@@ -178,11 +174,9 @@ tree data only for movement/input selectors.
 ```bash
 loupe cleanup
 loupe cleanup --traces-older-than 14d
-loupe cleanup --recordings-older-than 30d
 ```
 
-Use `cleanup` to prune stale runtime records and old trace bundles. Recordings
-are preserved unless explicitly requested.
+Use `cleanup` to prune stale runtime records and old trace bundles.
 
 ## Runtime Mutation
 

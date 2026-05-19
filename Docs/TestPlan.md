@@ -78,7 +78,7 @@ and the generated `/tmp/loupe-*` logs or screenshots before handing work back.
   waits for the in-app Loupe server to answer `/runtime`.
 - Cleanup:
   `loupe cleanup` prunes stale runtime records and trace bundles older than 7
-  days; recordings are only pruned with `--recordings-older-than`.
+  days.
 - Runtime registry:
   `loupe runtimes` / `loupe apps` lists known simulator hosts and live state.
 - Runtime mutation:
@@ -95,15 +95,10 @@ and the generated `/tmp/loupe-*` logs or screenshots before handing work back.
   an agent-led code application step.
 - Runtime identity handshake:
   `loupe runtime --udid <sim>` verifies that the contacted Loupe host belongs to
-  the expected simulator before recorder commands use it.
+  the expected simulator before runtime commands use it.
 - Injection communication:
   apps can post `dev.loupe.log` and `dev.loupe.viewMetadata` notifications to
   send custom logs and metadata without importing `LoupeKit`.
-- Recorder replay loop:
-  `loupe record start <alias>`, direct user or CLI interaction,
-  `loupe record stop` saves `~/.loupe/recordings/<alias>.json`, app relaunch,
-  then `loupe replay <alias> --host <url> --udid <sim>` uses recorded selector
-  candidates before coordinate fallback.
 - Basic action traces for public CLI actions:
   `--trace-dir <path>` saves before/after view snapshots, accessibility trees,
   runtime logs, screenshots, action records, and the resolved target query result

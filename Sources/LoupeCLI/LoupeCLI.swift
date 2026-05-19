@@ -45,23 +45,8 @@ struct LoupeCLI {
             try injectorPath(arguments)
         case "inspect":
             try inspect(arguments)
-        case "recording":
-            try await runtimeFetch(arguments, path: "/recording", usage: "loupe recording [--host <url>] [--udid <sim>] [--output <path>]")
-        case "record":
-            try await record(arguments)
-        case "recordings":
-            try await record(["list"] + arguments)
         case "reflect":
             try reflect(arguments)
-        case "record-start":
-            try await runtimeFetch(
-                arguments,
-                path: "/recording/start",
-                usage: "loupe record-start [alias] [--alias <name>] [--host <url>] [--udid <sim>] [--output <path>]",
-                allowsAlias: true
-            )
-        case "record-stop":
-            try await runtimeFetch(arguments, path: "/recording/stop", usage: "loupe record-stop [--host <url>] [--udid <sim>] [--output <path>]")
         case "runtime":
             try await runtimeFetch(arguments, path: "/runtime", usage: "loupe runtime [--host <url>] [--udid <sim>] [--output <path>]")
         case "mutations":
@@ -72,8 +57,6 @@ struct LoupeCLI {
             try await query(arguments)
         case "launch":
             try await launch(arguments)
-        case "replay":
-            try await replay(arguments)
         case "screenshot":
             try screenshot(arguments)
         case "skills":
@@ -428,15 +411,7 @@ struct LoupeCLI {
                 dryRun: options.dryRun
             )
         }
-        if let recordingsOlderThan = options.recordingsOlderThan {
-            report.recordingsRemoved = try cleanupDirectory(
-                recordingDirectory(),
-                olderThan: recordingsOlderThan,
-                dryRun: options.dryRun
-            )
-        }
-
-        print("\(options.dryRun ? "would remove" : "removed") runtimeRecords=\(report.runtimeRecordsRemoved) traceBundles=\(report.traceBundlesRemoved) recordings=\(report.recordingsRemoved)")
+        print("\(options.dryRun ? "would remove" : "removed") runtimeRecords=\(report.runtimeRecordsRemoved) traceBundles=\(report.traceBundlesRemoved)")
     }
 
     private static func cleanupRuntimeRecords(options: CleanupOptions) async throws -> Int {
@@ -653,8 +628,8 @@ struct LoupeCLI {
               compact <snapshot.json>
                   Print the LLM-facing compact observation for a full app snapshot.
 
-              cleanup [--dry-run] [--traces-older-than 7d] [--recordings-older-than 30d]
-                  Remove stale runtime records and old trace bundles. Recordings are kept unless requested.
+              cleanup [--dry-run] [--traces-older-than 7d]
+                  Remove stale runtime records and old trace bundles.
 
               compare-design <snapshot.json> <design.json> [--json]
                   Compare a Loupe snapshot against an exported Figma-style design JSON.
@@ -753,16 +728,7 @@ struct LoupeCLI {
                   Launch and inject the app so the in-app Loupe runtime server starts.
 
               runtime [--host <url>] [--udid <sim>] [--output <path>] [--timeout <seconds>]
-                  Fetch injected SDK runtime identity, recording state, and logs.
-
-              record-start|record-stop|recording [--host <url>] [--udid <sim>] [--output <path>]
-                  Control and fetch the injected SDK touch recorder.
-
-              record start <alias> | record stop | record list | record show <alias>
-                  Alias-based recorder commands. Stopped recordings are saved under ~/.loupe/recordings.
-
-              replay <recording.json|alias> --udid <sim>
-                  Replay a Loupe recording as native HID actions. Pinch events are not supported yet.
+                  Fetch injected SDK runtime identity and logs.
             """
         )
     }
@@ -904,60 +870,6 @@ struct LoupeCLI {
         print("udid\tlive\tbundle\t host\tpid\tsimulator\tstartedAt\tupdatedAt")
         for row in rows {
             print("\(row.udid)\t\(row.live ? "yes" : "no")\t\(row.bundleID)\t\(row.host)\t\(row.pid)\t\(row.simulator)\t\(row.startedAt)\t\(row.updatedAt)")
-        }
-    }
-
-    private static func record(_ arguments: [String]) async throws {
-        guard let subcommand = arguments.first else {
-            throw CLIError("Usage: loupe record start <alias> | stop | list | show <alias>")
-        }
-        let rest = Array(arguments.dropFirst())
-
-        switch subcommand {
-        case "start":
-            let options = try RuntimeFetchOptions(
-                rest,
-                usage: "loupe record start <alias> [--host <url>] [--udid <sim>] [--output <path>]",
-                allowsAlias: true
-            )
-            guard options.alias != nil else {
-                throw CLIError("record start requires an alias")
-            }
-            let data = try await runtimeData(path: "/recording/start", options: options)
-            try write(data: data, outputURL: options.outputURL)
-        case "stop":
-            let options = try RuntimeFetchOptions(
-                rest,
-                usage: "loupe record stop [--host <url>] [--udid <sim>] [--output <path>]"
-            )
-            let data = try await runtimeData(path: "/recording/stop", options: options)
-            if let outputURL = options.outputURL {
-                try data.write(to: outputURL)
-                print(outputURL.path)
-                return
-            }
-            let recording = try decodeRecording(data)
-            let url = try storeRecording(recording)
-            print(url.path)
-        case "show":
-            guard let alias = rest.first, !alias.hasPrefix("--") else {
-                throw CLIError("record show requires an alias")
-            }
-            let data = try Data(contentsOf: recordingURL(alias: alias))
-            FileHandle.standardOutput.write(data)
-            FileHandle.standardOutput.write(Data("\n".utf8))
-        case "list", "recordings":
-            let rows = try loadRecordingSummaries()
-            if rows.isEmpty {
-                print("No recordings saved.")
-            } else {
-                print("alias\tevents\tstartedAt\tendedAt\tbundle")
-                for row in rows {
-                    print("\(row.alias)\t\(row.eventCount)\t\(row.startedAt)\t\(row.endedAt)\t\(row.bundleID)")
-                }
-            }
-        default:
-            throw CLIError("Unknown record command: \(subcommand)")
         }
     }
 
@@ -1142,30 +1054,6 @@ struct LoupeCLI {
                 throw CLIError("Timed out waiting for expected visible Loupe node: \(testID)")
             }
             try await Task.sleep(nanoseconds: UInt64(options.interval * 1_000_000_000))
-        }
-    }
-
-    private static func replay(_ arguments: [String]) async throws {
-        var options = try ReplayOptions(arguments)
-        options.host = try await resolvedRuntimeHost(
-            requestedHost: options.host,
-            hostWasExplicit: options.hostWasExplicit,
-            udid: options.udid
-        )
-        try await validateRuntimeIdentity(host: options.host, expectedUDID: options.udid, timeout: options.actionOptions.timeout)
-        let data = try Data(contentsOf: options.recordingURL)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let recording = try decoder.decode(LoupeRecording.self, from: data)
-        let actions = replayActions(from: recording, screen: options.screen)
-
-        for action in actions {
-            var actionOptions = options.actionOptions
-            actionOptions.endPoint = action.endPoint
-            actionOptions.startSpread = action.startSpread
-            actionOptions.endSpread = action.endSpread
-            let target = try await replayTarget(for: action, options: options)
-            try dispatchAction(command: action.command, options: actionOptions, target: target)
         }
     }
 
@@ -1886,121 +1774,6 @@ struct LoupeCLI {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         let path = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         return path.isEmpty ? nil : path
-    }
-
-    private static func replayActions(from recording: LoupeRecording, screen: LoupeSize) -> [ReplayAction] {
-        var actions: [ReplayAction] = []
-        var currentStart: LoupeRuntimeEvent?
-        var lastMove: LoupeRuntimeEvent?
-
-        for event in recording.events where event.kind == .touch {
-            switch event.phase {
-            case .began:
-                currentStart = event
-                lastMove = nil
-            case .moved:
-                lastMove = event
-            case .ended, .cancelled:
-                guard let start = currentStart, let first = start.points.first, let last = event.points.first else {
-                    continue
-                }
-                if start.points.count >= 2, event.points.count >= 2 {
-                    let startSpread = distance(start.points[0], start.points[1])
-                    let endSpread = distance(event.points[0], event.points[1])
-                    let center = LoupePoint(x: (first.x + start.points[1].x) / 2, y: (first.y + start.points[1].y) / 2)
-                    actions.append(
-                        ReplayAction(
-                            command: "pinch",
-                            target: ActionTarget(point: center, screen: screen, screenScale: 1, source: .coordinates),
-                            endPoint: nil,
-                            startSpread: startSpread,
-                            endSpread: endSpread,
-                            selector: nil
-                        )
-                    )
-                } else if let move = lastMove, let movePoint = move.points.first, distance(first, movePoint) > 4 || distance(first, last) > 4 {
-                    actions.append(
-                        ReplayAction(
-                            command: "swipe",
-                            target: ActionTarget(point: first, screen: screen, screenScale: 1, source: .coordinates),
-                            endPoint: last,
-                            startSpread: nil,
-                            endSpread: nil,
-                            selector: nil
-                        )
-                    )
-                } else {
-                    actions.append(
-                        ReplayAction(
-                            command: "tap",
-                            target: ActionTarget(point: first, screen: screen, screenScale: 1, source: .coordinates),
-                            endPoint: nil,
-                            startSpread: nil,
-                            endSpread: nil,
-                            selector: start.targetCandidates.first.flatMap(loupeSelector)
-                        )
-                    )
-                }
-                currentStart = nil
-                lastMove = nil
-            case nil:
-                continue
-            }
-        }
-
-        return actions
-    }
-
-    private static func replayTarget(for action: ReplayAction, options: ReplayOptions) async throws -> ActionTarget {
-        guard let selector = action.selector else {
-            return action.target
-        }
-
-        do {
-            let snapshot = try await fetchSnapshot(host: options.host)
-            let accessibilityTree = try await fetchAccessibilityTree(host: options.host, fallbackSnapshot: snapshot)
-            if let result = LoupeAccessibilityTreeQuery.first(selector, in: accessibilityTree),
-               let point = result.activationPoint ?? center(of: result.frame) {
-                return ActionTarget(
-                    point: point,
-                    screen: snapshot.screen.size,
-                    screenScale: snapshot.screen.scale,
-                    source: .accessibility(ref: result.ref, sourceRef: result.sourceRef),
-                    match: .accessibility(result)
-                )
-            }
-            if let result = LoupeSnapshotQuery.first(selector, in: snapshot),
-               let point = center(of: result.frame) {
-                return ActionTarget(
-                    point: point,
-                    screen: snapshot.screen.size,
-                    screenScale: snapshot.screen.scale,
-                    source: .view(ref: result.ref),
-                    match: .view(result)
-                )
-            }
-        } catch {
-            FileHandle.standardError.write(Data("warning: replay selector resolution failed: \(error)\n".utf8))
-        }
-
-        FileHandle.standardError.write(Data("warning: replay falling back to recorded coordinates\n".utf8))
-        return action.target
-    }
-
-    private static func loupeSelector(from candidate: LoupeRecordedTargetCandidate) -> LoupeSelector? {
-        switch candidate.selector.kind {
-        case .testID:
-            return .testID(candidate.selector.value)
-        case .text:
-            return .text(candidate.selector.value, exact: candidate.selector.exact)
-        case .roleAndText:
-            guard let role = candidate.selector.role else {
-                return .text(candidate.selector.value, exact: candidate.selector.exact)
-            }
-            return .roleAndText(role: role, text: candidate.selector.value, exact: candidate.selector.exact)
-        case .ref:
-            return .ref(candidate.selector.value)
-        }
     }
 
     static func httpData(
@@ -2972,63 +2745,6 @@ struct LoupeCLI {
         )
     }
 
-    private static func recordingDirectory() -> URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".loupe", isDirectory: true)
-            .appendingPathComponent("recordings", isDirectory: true)
-    }
-
-    private static func recordingURL(alias: String) -> URL {
-        recordingDirectory().appendingPathComponent("\(sanitizedAlias(alias)).json")
-    }
-
-    private static func storeRecording(_ recording: LoupeRecording) throws -> URL {
-        let alias = recording.alias ?? recording.id
-        let url = recordingURL(alias: alias)
-        try FileManager.default.createDirectory(at: recordingDirectory(), withIntermediateDirectories: true)
-        try writeJSON(recording, to: url)
-        return url
-    }
-
-    private static func decodeRecording(_ data: Data) throws -> LoupeRecording {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(LoupeRecording.self, from: data)
-    }
-
-    private static func loadRecordingSummaries() throws -> [RecordingSummary] {
-        guard let urls = try? FileManager.default.contentsOfDirectory(
-            at: recordingDirectory(),
-            includingPropertiesForKeys: nil
-        ) else {
-            return []
-        }
-        return urls
-            .filter { $0.pathExtension == "json" }
-            .compactMap { url -> RecordingSummary? in
-                guard let data = try? Data(contentsOf: url),
-                      let recording = try? decodeRecording(data) else {
-                    return nil
-                }
-                return RecordingSummary(
-                    alias: recording.alias ?? url.deletingPathExtension().lastPathComponent,
-                    eventCount: recording.events.count,
-                    startedAt: isoString(recording.startedAt),
-                    endedAt: recording.endedAt.map(isoString) ?? "",
-                    bundleID: recording.appIdentity?.bundleIdentifier ?? ""
-                )
-            }
-            .sorted { $0.startedAt > $1.startedAt }
-    }
-
-    private static func sanitizedAlias(_ alias: String) -> String {
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
-        return alias.unicodeScalars
-            .map { allowed.contains($0) ? Character($0) : "-" }
-            .map(String.init)
-            .joined()
-    }
-
     static func isoString(_ date: Date) -> String {
         ISO8601DateFormatter().string(from: date)
     }
@@ -3040,9 +2756,4 @@ struct LoupeCLI {
         return String(value)
     }
 
-    private static func distance(_ lhs: LoupePoint, _ rhs: LoupePoint) -> Double {
-        let dx = lhs.x - rhs.x
-        let dy = lhs.y - rhs.y
-        return (dx * dx + dy * dy).squareRoot()
-    }
 }

@@ -180,29 +180,6 @@ public final class LoupeServer: @unchecked Sendable {
             } catch {
                 return ResponsePayload(status: 500, body: errorBody("logs_encoding_failed", error: error))
             }
-        case "/recording":
-            do {
-                let data = try makeLoupeJSONEncoder().encode(LoupeRuntime.shared.currentRecording())
-                return ResponsePayload(status: 200, body: String(decoding: data, as: UTF8.self))
-            } catch {
-                return ResponsePayload(status: 500, body: errorBody("recording_encoding_failed", error: error))
-            }
-        case "/recording/start":
-            do {
-                let data = try makeLoupeJSONEncoder().encode(
-                    LoupeRuntime.shared.startRecording(alias: request.queryItems["alias"])
-                )
-                return ResponsePayload(status: 200, body: String(decoding: data, as: UTF8.self))
-            } catch {
-                return ResponsePayload(status: 500, body: errorBody("recording_start_failed", error: error))
-            }
-        case "/recording/stop":
-            do {
-                let data = try makeLoupeJSONEncoder().encode(LoupeRuntime.shared.stopRecording())
-                return ResponsePayload(status: 200, body: String(decoding: data, as: UTF8.self))
-            } catch {
-                return ResponsePayload(status: 500, body: errorBody("recording_stop_failed", error: error))
-            }
         case "/snapshot":
             do {
                 let data = try makeLoupeJSONEncoder().encode(LoupeAgent().captureSnapshot())
