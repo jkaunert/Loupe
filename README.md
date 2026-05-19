@@ -27,14 +27,17 @@ loupe runtime --udid booted
 ```
 
 `start` injects Loupe into the app and waits for the in-app runtime server. When
-multiple simulators are booted, pass the exact simulator UDID.
+multiple simulators are booted, pass the exact simulator UDID. Loupe chooses an
+available localhost port unless `--port` is provided, prints the runtime host,
+and records it for later `--udid` or `--bundle-id` commands.
 
 ## Observe
 
 ```bash
 loupe tree --udid <UDID> --accessibility --depth 3
 loupe tree --udid <UDID> --view --depth 3
-loupe fetch http://127.0.0.1:8765/snapshot --output snapshot.json
+loupe current
+loupe fetch <runtime-host>/snapshot --output snapshot.json
 loupe inspect snapshot.json --test-id checkout.payButton
 loupe compact snapshot.json
 ```

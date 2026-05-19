@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-PORT="${LOUPE_PORT:-8765}"
+PORT="${LOUPE_PORT:-}"
 cd "$ROOT_DIR"
 
 booted_udid() {
@@ -19,7 +19,7 @@ if [[ -z "$DEVICE" ]]; then
   exit 1
 fi
 
-HOST="http://127.0.0.1:$PORT"
+HOST=""
 SNAPSHOT_PATH="/tmp/loupe-gesture-snapshot.json"
 TRACE_DIR="/tmp/loupe-gesture-bottomsheet-scroll-trace"
 
@@ -47,12 +47,23 @@ terminate_app() {
 
 launch_app() {
   terminate_app
-  .build/debug/loupe launch \
-    --device "$DEVICE" \
-    --bundle-id dev.loupe.example \
-    --inject \
-    --env "LOUPE_PORT=$PORT" \
-    --env "LOUPE_EXAMPLE_ROUTE=bottomSheet" >/dev/null
+  local arguments=(
+    --device "$DEVICE"
+    --bundle-id dev.loupe.example
+    --inject
+    --env "LOUPE_EXAMPLE_ROUTE=bottomSheet"
+  )
+  if [[ -n "$PORT" ]]; then
+    arguments+=(--env "LOUPE_PORT=$PORT")
+  fi
+  local launch_output
+  launch_output="$(.build/debug/loupe launch "${arguments[@]}")"
+  HOST="$(awk '/^loupe host: / { print $3 }' <<<"$launch_output" | tail -1)"
+  if [[ -z "$HOST" ]]; then
+    echo "error: loupe launch did not report a runtime host" >&2
+    echo "$launch_output" >&2
+    exit 1
+  fi
   sleep 2
 }
 

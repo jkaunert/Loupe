@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 DEVICE_NAME="${LOUPE_DEVICE_NAME:-iPhone 17 Pro}"
-PORT="${LOUPE_PORT:-8765}"
+PORT="${LOUPE_PORT:-}"
 
 cd "$ROOT_DIR"
 
@@ -38,11 +38,22 @@ xcrun simctl boot "$DEVICE_NAME" >/dev/null 2>&1 || true
 xcrun simctl install booted "$APP_PATH"
 xcrun simctl terminate booted dev.loupe.example >/dev/null 2>&1 || true
 
-.build/debug/loupe launch \
-  --device booted \
-  --bundle-id dev.loupe.example \
-  --inject \
-  --env LOUPE_PORT="$PORT" >/dev/null
+LAUNCH_ARGUMENTS=(
+  --device booted
+  --bundle-id dev.loupe.example
+  --inject
+)
+if [[ -n "$PORT" ]]; then
+  LAUNCH_ARGUMENTS+=(--env "LOUPE_PORT=$PORT")
+fi
+LAUNCH_OUTPUT="$(.build/debug/loupe launch "${LAUNCH_ARGUMENTS[@]}")"
+HOST="$(awk '/^loupe host: / { print $3 }' <<<"$LAUNCH_OUTPUT" | tail -1)"
+if [[ -z "$HOST" ]]; then
+  echo "error: loupe launch did not report a runtime host" >&2
+  echo "$LAUNCH_OUTPUT" >&2
+  exit 1
+fi
+PORT="$(ruby -ruri -e 'puts URI(ARGV.fetch(0)).port' "$HOST")"
 
 sleep 2
 

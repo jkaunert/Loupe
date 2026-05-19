@@ -41,8 +41,10 @@ loupe launch --bundle-id com.example.App --dylib /absolute/path/LoupeInjector.fr
 After launch, fetch context from the in-app Loupe server:
 
 ```bash
-loupe fetch http://127.0.0.1:8765/observation
-loupe fetch http://127.0.0.1:8765/snapshot --output /tmp/loupe-snapshot.json
+loupe current
+loupe tree --bundle-id com.example.App --accessibility --depth 3
+loupe fetch <runtime-host>/observation
+loupe fetch <runtime-host>/snapshot --output /tmp/loupe-snapshot.json
 loupe query /tmp/loupe-snapshot.json --test-id checkout.payButton
 loupe accessibility /tmp/loupe-snapshot.json
 loupe query /tmp/loupe-snapshot.json --tree accessibility --test-id checkout.payButton
@@ -74,7 +76,8 @@ loupe tree --udid booted --accessibility --depth 3
 loupe tree --udid booted --view --depth 3
 loupe tree --bundle-id com.example.App --interesting
 loupe tree --bundle-id com.example.App --text --accessibility
-loupe fetch http://127.0.0.1:8765/snapshot --output /tmp/loupe-snapshot.json
+loupe current
+loupe fetch <runtime-host>/snapshot --output /tmp/loupe-snapshot.json
 loupe inspect /tmp/loupe-snapshot.json --test-id target.id
 loupe mutations --ref n21
 loupe tap --test-id target.id --udid booted --trace-dir /tmp/loupe-trace --expect-visible next.id
@@ -154,7 +157,7 @@ If injection does not start the server:
 - Confirm the app is running in iOS Simulator, not a real device.
 - Confirm `loupe injector-path` prints an executable path.
 - Relaunch the app with `loupe launch --bundle-id <id> --inject`.
-- Check `http://127.0.0.1:8765/health`.
+- Check `loupe current`, then `<runtime-host>/health`.
 
 ## Design Comparison
 

@@ -2,6 +2,9 @@ import Foundation
 import LoupeCLIModel
 import LoupeCore
 import LoupeHID
+#if canImport(Darwin)
+import Darwin
+#endif
 
 @main
 struct LoupeCLI {
@@ -433,7 +436,7 @@ struct LoupeCLI {
 
             removed += 1
             if !options.dryRun {
-                try? FileManager.default.removeItem(at: runtimeHostRecordURL(udid: record.udid))
+                try? removeRuntimeHostRecord(record)
             }
         }
 
@@ -641,7 +644,7 @@ struct LoupeCLI {
                   Check local Loupe installation and injector discovery.
 
               fetch <url> [--output <path>] [--timeout <seconds>]
-                  Fetch a probe endpoint such as http://127.0.0.1:8765/observation.
+                  Fetch a probe endpoint such as <runtime-host>/observation.
 
               logs [--host <url>] [--udid <sim>] [--output <path>] [--timeout <seconds>]
                   Fetch runtime logs emitted by the injected Loupe SDK.
@@ -724,7 +727,7 @@ struct LoupeCLI {
               skills install [--target all|codex|claude] [--source <skills/loupe>]
                   Upsert the Loupe skill into existing Codex or Claude Code skill folders.
 
-              start --bundle-id <id> [--device booted] [--port 8765] [--env KEY=VALUE]
+              start --bundle-id <id> [--device booted] [--port <port>] [--env KEY=VALUE]
                   Launch and inject the app so the in-app Loupe runtime server starts.
 
               runtime [--host <url>] [--udid <sim>] [--output <path>] [--timeout <seconds>]
@@ -1285,7 +1288,7 @@ struct LoupeCLI {
         throw CLIError("Timed out waiting for Loupe runtime at \(host.absoluteString): \(lastError.map(String.init(describing:)) ?? "no response")")
     }
 
-    private static func resolvedLoupePort(for udid: String, environment: [String: String]) throws -> UInt16 {
+    private static func resolvedLoupePort(for _: String, environment: [String: String]) throws -> UInt16 {
         if let rawPort = environment["LOUPE_PORT"] {
             guard let port = UInt16(rawPort), port > 0 else {
                 throw CLIError("LOUPE_PORT must be a valid TCP port")
@@ -1293,16 +1296,37 @@ struct LoupeCLI {
             return port
         }
 
-        return stablePort(for: udid)
+        return try randomAvailableLoupePort()
     }
 
-    private static func stablePort(for udid: String) -> UInt16 {
-        var hash: UInt32 = 2_166_136_261
-        for byte in udid.utf8 {
-            hash ^= UInt32(byte)
-            hash &*= 16_777_619
+    private static func randomAvailableLoupePort() throws -> UInt16 {
+        for _ in 0..<100 {
+            let port = UInt16.random(in: 10_000...60_999)
+            if isLocalhostPortAvailable(port) {
+                return port
+            }
         }
-        return UInt16(8_765 + (hash % 1_000))
+        throw CLIError("Could not find an available local port for Loupe runtime injection.")
+    }
+
+    private static func isLocalhostPortAvailable(_ port: UInt16) -> Bool {
+        let descriptor = socket(AF_INET, SOCK_STREAM, 0)
+        guard descriptor >= 0 else {
+            return false
+        }
+        defer { close(descriptor) }
+
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = port.bigEndian
+        address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
+
+        return withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                bind(descriptor, socketAddress, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0
+            }
+        }
     }
 
     private static func validateLaunchPort(host: URL, expectedUDID: String, expectedBundleID: String) throws {

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-PORT="${LOUPE_BOOKMARK_PORT:-8767}"
+PORT="${LOUPE_BOOKMARK_PORT:-${LOUPE_PORT:-}}"
 
 cd "$ROOT_DIR"
 
@@ -113,16 +113,25 @@ APP_PATH="$(
 terminate_app
 run_with_timeout 30 xcrun simctl install "$DEVICE" "$APP_PATH"
 
-.build/debug/loupe launch \
-  --device "$DEVICE" \
-  --bundle-id dev.loupe.example \
-  --inject \
-  --env "LOUPE_PORT=$PORT" \
-  --env LOUPE_EXAMPLE_ROUTE=bookmarks >/dev/null
+LAUNCH_ARGUMENTS=(
+  --device "$DEVICE"
+  --bundle-id dev.loupe.example
+  --inject
+  --env LOUPE_EXAMPLE_ROUTE=bookmarks
+)
+if [[ -n "$PORT" ]]; then
+  LAUNCH_ARGUMENTS+=(--env "LOUPE_PORT=$PORT")
+fi
+LAUNCH_OUTPUT="$(.build/debug/loupe launch "${LAUNCH_ARGUMENTS[@]}")"
+HOST="$(awk '/^loupe host: / { print $3 }' <<<"$LAUNCH_OUTPUT" | tail -1)"
+if [[ -z "$HOST" ]]; then
+  echo "error: loupe launch did not report a runtime host" >&2
+  echo "$LAUNCH_OUTPUT" >&2
+  exit 1
+fi
 
 sleep 2
 
-HOST="http://127.0.0.1:$PORT"
 SNAPSHOT_PATH="/tmp/loupe-bookmark-snapshot.json"
 OBSERVATION_PATH="/tmp/loupe-bookmark-observation.json"
 INSPECT_PATH="/tmp/loupe-bookmark-inspect.json"
@@ -252,6 +261,8 @@ BACK_REF="$(query_ref bookmark.detail.back)"
 .build/debug/loupe wait-for-visible --host "$HOST" --test-id bookmark.favorites --timeout 5 >/tmp/loupe-bookmark-wait-favorites-return.json
 
 echo "case: bookmark search tab"
+.build/debug/loupe wait-for-visible --host "$HOST" --test-id bookmark.tabbar --timeout 5 >/tmp/loupe-bookmark-wait-tabbar-before-search.json
+.build/debug/loupe wait-for-visible --host "$HOST" --test-id bookmark.tab.search --timeout 5 >/tmp/loupe-bookmark-wait-search-tab.json
 .build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --test-id bookmark.tab.search
 .build/debug/loupe wait-for-visible --host "$HOST" --test-id bookmark.search --timeout 5 >/tmp/loupe-bookmark-wait-search.json
 .build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --test-id bookmark.search.field

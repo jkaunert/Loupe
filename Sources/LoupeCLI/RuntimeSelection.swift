@@ -156,8 +156,9 @@ extension LoupeCLI {
             .appendingPathComponent("runtimes", isDirectory: true)
     }
 
-    static func runtimeHostRecordURL(udid: String) -> URL {
-        runtimeHostDirectory().appendingPathComponent("\(udid).json")
+    static func runtimeHostRecordURL(udid: String, bundleID: String) -> URL {
+        let filename = "\(runtimeRecordPathComponent(udid))--\(runtimeRecordPathComponent(bundleID)).json"
+        return runtimeHostDirectory().appendingPathComponent(filename)
     }
 
     static func currentRuntimeHostURL() -> URL {
@@ -168,18 +169,11 @@ extension LoupeCLI {
         let directory = runtimeHostDirectory()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let record = LoupeRuntimeHostRecord(udid: udid, bundleID: bundleID, host: host.absoluteString, updatedAt: Date())
-        try writeJSON(record, to: runtimeHostRecordURL(udid: udid))
+        try writeJSON(record, to: runtimeHostRecordURL(udid: udid, bundleID: bundleID))
     }
 
     static func loadRuntimeHost(udid: String) throws -> LoupeRuntimeHostRecord? {
-        let url = runtimeHostRecordURL(udid: udid)
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            return nil
-        }
-        let data = try Data(contentsOf: url)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(LoupeRuntimeHostRecord.self, from: data)
+        try loadRuntimeHostRecords().first { $0.udid == udid }
     }
 
     static func storeCurrentRuntimeHost(_ record: LoupeRuntimeHostRecord) throws {
@@ -218,5 +212,34 @@ extension LoupeCLI {
                 return try? decoder.decode(LoupeRuntimeHostRecord.self, from: data)
             }
             .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    static func removeRuntimeHostRecord(_ record: LoupeRuntimeHostRecord) throws {
+        let directory = runtimeHostDirectory()
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        ) else {
+            return
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        for url in urls where url.pathExtension == "json" && url.lastPathComponent != "current.json" {
+            guard let data = try? Data(contentsOf: url),
+                  let candidate = try? decoder.decode(LoupeRuntimeHostRecord.self, from: data),
+                  candidate.udid == record.udid,
+                  candidate.bundleID == record.bundleID,
+                  candidate.host == record.host else {
+                continue
+            }
+            try FileManager.default.removeItem(at: url)
+        }
+    }
+
+    static func runtimeRecordPathComponent(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-_"))
+        return value.unicodeScalars.map { scalar in
+            allowed.contains(scalar) ? String(scalar) : "_"
+        }.joined()
     }
 }

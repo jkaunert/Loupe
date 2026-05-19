@@ -92,10 +92,10 @@ compose.
 - `loupe runtime` and `logs` accept
   `--udid` and validate that the connected Loupe host belongs to that simulator
   before reading runtime state.
-- `loupe start` / `loupe launch --inject` assigns a stable per-simulator localhost port when
-  `LOUPE_PORT` is not provided, records it under `~/.loupe/runtimes`, and waits
-  for the injected runtime before returning. Later CLI commands can resolve the
-  host from `--udid`.
+- `loupe start` / `loupe launch --inject` assigns an available localhost port
+  when `LOUPE_PORT` is not provided, records the UDID+bundle mapping under
+  `~/.loupe/runtimes`, and waits for the injected runtime before returning.
+  Later CLI commands can resolve the host from `--udid` or `--bundle-id`.
 - `loupe fetch`, runtime fetches, screenshots, and native HID actions have
   bounded timeouts.
 - `loupe runtimes` / `loupe apps` lists known injected runtime hosts from

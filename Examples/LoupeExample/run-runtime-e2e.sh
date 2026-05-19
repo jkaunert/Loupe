@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-PORT="${LOUPE_PORT:-8765}"
+PORT="${LOUPE_PORT:-}"
 
 cd "$ROOT_DIR"
 
@@ -113,15 +113,24 @@ APP_PATH="$(
 terminate_app
 run_with_timeout 30 xcrun simctl install "$DEVICE" "$APP_PATH"
 
-.build/debug/loupe launch \
-  --device "$DEVICE" \
-  --bundle-id dev.loupe.example \
-  --inject \
-  --env LOUPE_PORT="$PORT" >/dev/null
+LAUNCH_ARGUMENTS=(
+  --device "$DEVICE"
+  --bundle-id dev.loupe.example
+  --inject
+)
+if [[ -n "$PORT" ]]; then
+  LAUNCH_ARGUMENTS+=(--env "LOUPE_PORT=$PORT")
+fi
+LAUNCH_OUTPUT="$(.build/debug/loupe launch "${LAUNCH_ARGUMENTS[@]}")"
+HOST="$(awk '/^loupe host: / { print $3 }' <<<"$LAUNCH_OUTPUT" | tail -1)"
+if [[ -z "$HOST" ]]; then
+  echo "error: loupe launch did not report a runtime host" >&2
+  echo "$LAUNCH_OUTPUT" >&2
+  exit 1
+fi
 
 sleep 2
 
-HOST="http://127.0.0.1:$PORT"
 SNAPSHOT_PATH="/tmp/loupe-runtime-snapshot.json"
 SCREENSHOT_PATH="/tmp/loupe-runtime-screen.png"
 RUNTIME_PATH="/tmp/loupe-runtime-state.json"

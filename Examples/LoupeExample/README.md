@@ -33,7 +33,7 @@ Run:
 Expected result:
 
 - the app launches on a booted simulator
-- `http://127.0.0.1:8765/health` returns `LoupeKit`
+- the script prints the randomized Loupe runtime health response
 - `/snapshot` contains the UIKit view hierarchy
 - `loupe query ... --test-id example.customerList` returns the table node
 
