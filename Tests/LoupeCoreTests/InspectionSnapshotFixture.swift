@@ -30,6 +30,43 @@ enum InspectionSnapshotFixture {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: false,
+                    uiKit: LoupeUIKitProperties(
+                        className: "UIStackView",
+                        tag: 0,
+                        alpha: 1,
+                        isHidden: false,
+                        isOpaque: false,
+                        clipsToBounds: false,
+                        userInteractionEnabled: true,
+                        isFirstResponder: false,
+                        layout: LoupeUILayoutProperties(
+                            translatesAutoresizingMaskIntoConstraints: false,
+                            hugging: LoupeUILayoutPriorities(horizontal: 250, vertical: 250),
+                            compressionResistance: LoupeUILayoutPriorities(horizontal: 750, vertical: 750),
+                            constraints: [
+                                LoupeUILayoutConstraintProperties(
+                                    firstItem: "UIStackView#components.row",
+                                    firstAttribute: "height",
+                                    relation: "equal",
+                                    secondItem: nil,
+                                    secondAttribute: "notAnAttribute",
+                                    multiplier: 1,
+                                    constant: 44,
+                                    priority: 1000,
+                                    isActive: true
+                                )
+                            ]
+                        ),
+                        stackView: LoupeUIStackViewProperties(
+                            axis: "horizontal",
+                            alignment: "center",
+                            distribution: "fill",
+                            spacing: 12,
+                            isBaselineRelativeArrangement: false,
+                            isLayoutMarginsRelativeArrangement: false,
+                            arrangedSubviewCount: 2
+                        )
+                    ),
                     children: ["label", "switch"]
                 ),
                 "label": LoupeNode(

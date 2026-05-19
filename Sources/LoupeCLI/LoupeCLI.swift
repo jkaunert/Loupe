@@ -2504,6 +2504,9 @@ struct LoupeCLI {
             "frame", "bounds", "center", "alpha", "hidden", "clipsToBounds",
             "userInteractionEnabled", "backgroundColor", "tintColor", "accessibility.label",
             "accessibility.value", "accessibility.hint", "accessibility.isElement",
+            "layout.translatesAutoresizingMaskIntoConstraints", "layout.hugging.horizontal",
+            "layout.hugging.vertical", "layout.compressionResistance.horizontal",
+            "layout.compressionResistance.vertical",
         ]
 
         if isTextBacked(node) {
@@ -2549,6 +2552,12 @@ struct LoupeCLI {
         }
         if node.role == "scrollView" {
             properties += ["contentOffset", "contentSize", "contentInset", "scrollEnabled", "pagingEnabled"]
+        }
+        if node.uiKit?.stackView != nil || (node.uiKit?.className ?? node.typeName) == "UIStackView" {
+            properties += [
+                "stack.axis", "stack.alignment", "stack.distribution", "stack.spacing",
+                "stack.layoutMarginsRelativeArrangement",
+            ]
         }
 
         return Array(Set(properties)).sorted()

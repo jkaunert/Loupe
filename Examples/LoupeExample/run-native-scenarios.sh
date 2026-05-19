@@ -121,6 +121,9 @@ INSPECT_PATH="/tmp/loupe-native-inspect.json"
 AUDIT_PATH="/tmp/loupe-native-audit.json"
 SUBTREE_PATH="/tmp/loupe-native-subtree.json"
 TRACE_DIR="/tmp/loupe-native-trace"
+FRAME_MUTATION_PATH="/tmp/loupe-native-frame-mutation.json"
+LAYOUT_MUTATION_PATH="/tmp/loupe-native-layout-mutation.json"
+STACK_MUTATION_PATH="/tmp/loupe-native-stack-mutation.json"
 
 launch_app() {
   local route="${1:-}"
@@ -308,6 +311,26 @@ echo "case: layout audit emits machine-readable design checks"
 grep -q '"issueCount"' "$AUDIT_PATH"
 grep -q '"issues"' "$AUDIT_PATH"
 
+echo "case: frame, Auto Layout, and stack view runtime mutations"
+.build/debug/loupe set --host "$HOST" --test-id example.design.card frame --rect 20,220,320,140 --output "$FRAME_MUTATION_PATH"
+grep -q '"property" : "frame"' "$FRAME_MUTATION_PATH"
+grep -q '"requested"' "$FRAME_MUTATION_PATH"
+grep -q '"effective"' "$FRAME_MUTATION_PATH"
+grep -q '"changed"' "$FRAME_MUTATION_PATH"
+
+.build/debug/loupe set --host "$HOST" --test-id example.components.label layout.hugging.horizontal --number 260.5 --output "$LAYOUT_MUTATION_PATH"
+grep -q '"property" : "layout.hugging.horizontal"' "$LAYOUT_MUTATION_PATH"
+grep -q '"changed" : true' "$LAYOUT_MUTATION_PATH"
+grep -q '"value" : 260.5' "$LAYOUT_MUTATION_PATH"
+
+.build/debug/loupe set --host "$HOST" --test-id example.components.switchRow stack.axis vertical --output "$STACK_MUTATION_PATH"
+grep -q '"property" : "stack.axis"' "$STACK_MUTATION_PATH"
+grep -q '"changed" : true' "$STACK_MUTATION_PATH"
+grep -q '"value" : "vertical"' "$STACK_MUTATION_PATH"
+fetch_snapshot
+.build/debug/loupe inspect "$SNAPSHOT_PATH" --test-id example.components.switchRow > "$INSPECT_PATH"
+grep -q '"axis" : "vertical"' "$INSPECT_PATH"
+
 echo "case: mixed fixture tabs for SwiftUI, WebKit, keyboard, and nested scroll"
 launch_app fixtures
 .build/debug/loupe wait-for-visible --host "$HOST" --test-id example.fixtures --timeout 5 >/tmp/loupe-native-wait-fixtures.json
@@ -357,4 +380,7 @@ echo "accessibility: $ACCESSIBILITY_PATH"
 echo "inspect: $INSPECT_PATH"
 echo "audit: $AUDIT_PATH"
 echo "subtree: $SUBTREE_PATH"
+echo "frame mutation: $FRAME_MUTATION_PATH"
+echo "layout mutation: $LAYOUT_MUTATION_PATH"
+echo "stack mutation: $STACK_MUTATION_PATH"
 echo "trace: $TRACE_DIR"

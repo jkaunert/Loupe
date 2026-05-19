@@ -279,6 +279,106 @@ public struct LoupeWKWebViewProperties: Codable, Equatable {
     }
 }
 
+public struct LoupeUILayoutPriorities: Codable, Equatable {
+    public var horizontal: Double
+    public var vertical: Double
+
+    public init(horizontal: Double, vertical: Double) {
+        self.horizontal = horizontal
+        self.vertical = vertical
+    }
+}
+
+public struct LoupeUILayoutConstraintProperties: Codable, Equatable {
+    public var identifier: String?
+    public var firstItem: String?
+    public var firstAttribute: String
+    public var relation: String
+    public var secondItem: String?
+    public var secondAttribute: String
+    public var multiplier: Double
+    public var constant: Double
+    public var priority: Double
+    public var isActive: Bool
+
+    public init(
+        identifier: String? = nil,
+        firstItem: String? = nil,
+        firstAttribute: String,
+        relation: String,
+        secondItem: String? = nil,
+        secondAttribute: String,
+        multiplier: Double,
+        constant: Double,
+        priority: Double,
+        isActive: Bool
+    ) {
+        self.identifier = identifier
+        self.firstItem = firstItem
+        self.firstAttribute = firstAttribute
+        self.relation = relation
+        self.secondItem = secondItem
+        self.secondAttribute = secondAttribute
+        self.multiplier = multiplier
+        self.constant = constant
+        self.priority = priority
+        self.isActive = isActive
+    }
+}
+
+public struct LoupeUILayoutProperties: Codable, Equatable {
+    public var translatesAutoresizingMaskIntoConstraints: Bool
+    public var hugging: LoupeUILayoutPriorities
+    public var compressionResistance: LoupeUILayoutPriorities
+    public var constraints: [LoupeUILayoutConstraintProperties]
+    public var affectingHorizontalConstraints: [LoupeUILayoutConstraintProperties]
+    public var affectingVerticalConstraints: [LoupeUILayoutConstraintProperties]
+
+    public init(
+        translatesAutoresizingMaskIntoConstraints: Bool,
+        hugging: LoupeUILayoutPriorities,
+        compressionResistance: LoupeUILayoutPriorities,
+        constraints: [LoupeUILayoutConstraintProperties] = [],
+        affectingHorizontalConstraints: [LoupeUILayoutConstraintProperties] = [],
+        affectingVerticalConstraints: [LoupeUILayoutConstraintProperties] = []
+    ) {
+        self.translatesAutoresizingMaskIntoConstraints = translatesAutoresizingMaskIntoConstraints
+        self.hugging = hugging
+        self.compressionResistance = compressionResistance
+        self.constraints = constraints
+        self.affectingHorizontalConstraints = affectingHorizontalConstraints
+        self.affectingVerticalConstraints = affectingVerticalConstraints
+    }
+}
+
+public struct LoupeUIStackViewProperties: Codable, Equatable {
+    public var axis: String
+    public var alignment: String
+    public var distribution: String
+    public var spacing: Double
+    public var isBaselineRelativeArrangement: Bool
+    public var isLayoutMarginsRelativeArrangement: Bool
+    public var arrangedSubviewCount: Int
+
+    public init(
+        axis: String,
+        alignment: String,
+        distribution: String,
+        spacing: Double,
+        isBaselineRelativeArrangement: Bool,
+        isLayoutMarginsRelativeArrangement: Bool,
+        arrangedSubviewCount: Int
+    ) {
+        self.axis = axis
+        self.alignment = alignment
+        self.distribution = distribution
+        self.spacing = spacing
+        self.isBaselineRelativeArrangement = isBaselineRelativeArrangement
+        self.isLayoutMarginsRelativeArrangement = isLayoutMarginsRelativeArrangement
+        self.arrangedSubviewCount = arrangedSubviewCount
+    }
+}
+
 public struct LoupeUIKitProperties: Codable, Equatable {
     public var viewController: String?
     public var className: String
@@ -292,6 +392,8 @@ public struct LoupeUIKitProperties: Codable, Equatable {
     public var gestureRecognizers: [String]
     public var isFirstResponder: Bool
     public var windowLevel: Double?
+    public var layout: LoupeUILayoutProperties?
+    public var stackView: LoupeUIStackViewProperties?
     public var control: LoupeUIControlProperties?
     public var label: LoupeUILabelProperties?
     public var button: LoupeUIButtonProperties?
@@ -324,6 +426,8 @@ public struct LoupeUIKitProperties: Codable, Equatable {
         gestureRecognizers: [String] = [],
         isFirstResponder: Bool,
         windowLevel: Double? = nil,
+        layout: LoupeUILayoutProperties? = nil,
+        stackView: LoupeUIStackViewProperties? = nil,
         control: LoupeUIControlProperties? = nil,
         label: LoupeUILabelProperties? = nil,
         button: LoupeUIButtonProperties? = nil,
@@ -355,6 +459,8 @@ public struct LoupeUIKitProperties: Codable, Equatable {
         self.gestureRecognizers = gestureRecognizers
         self.isFirstResponder = isFirstResponder
         self.windowLevel = windowLevel
+        self.layout = layout
+        self.stackView = stackView
         self.control = control
         self.label = label
         self.button = button

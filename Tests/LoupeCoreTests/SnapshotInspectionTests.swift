@@ -47,4 +47,23 @@ struct SnapshotInspectionTests {
         #expect(scrollView.contentSize.height > inspection.node.frame!.height)
     }
 
+    @Test func inspectPreservesLayoutAndStackViewDiagnostics() throws {
+        let snapshot = InspectionSnapshotFixture.makeSnapshot()
+
+        let inspection = try #require(
+            LoupeSnapshotInspector.inspect(.testID("components.row"), in: snapshot)
+        )
+        let layout = try #require(inspection.node.uiKit?.layout)
+        let stackView = try #require(inspection.node.uiKit?.stackView)
+
+        #expect(layout.translatesAutoresizingMaskIntoConstraints == false)
+        #expect(layout.hugging.horizontal == 250)
+        #expect(layout.compressionResistance.vertical == 750)
+        #expect(layout.constraints.first?.firstAttribute == "height")
+        #expect(layout.constraints.first?.constant == 44)
+        #expect(stackView.axis == "horizontal")
+        #expect(stackView.alignment == "center")
+        #expect(stackView.spacing == 12)
+        #expect(stackView.arrangedSubviewCount == 2)
+    }
 }

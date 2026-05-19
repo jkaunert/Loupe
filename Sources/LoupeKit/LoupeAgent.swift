@@ -751,6 +751,26 @@ private func mutationPropertyValue(_ property: String, in node: LoupeNode) -> Lo
         return node.accessibility?.hint.map(LoupeMutationValue.string)
     case "accessibility.identifier", "accessibilityidentifier", "testid":
         return node.accessibility?.identifier.map(LoupeMutationValue.string) ?? node.testID.map(LoupeMutationValue.string)
+    case "layout.translatesautoresizingmaskintoconstraints", "translatesautoresizingmaskintoconstraints":
+        return node.uiKit?.layout.map { .bool($0.translatesAutoresizingMaskIntoConstraints) }
+    case "layout.hugging.horizontal":
+        return node.uiKit?.layout.map { .double($0.hugging.horizontal) }
+    case "layout.hugging.vertical":
+        return node.uiKit?.layout.map { .double($0.hugging.vertical) }
+    case "layout.compressionresistance.horizontal":
+        return node.uiKit?.layout.map { .double($0.compressionResistance.horizontal) }
+    case "layout.compressionresistance.vertical":
+        return node.uiKit?.layout.map { .double($0.compressionResistance.vertical) }
+    case "stack.axis", "stackview.axis":
+        return node.uiKit?.stackView.map { .string($0.axis) }
+    case "stack.alignment", "stackview.alignment":
+        return node.uiKit?.stackView.map { .string($0.alignment) }
+    case "stack.distribution", "stackview.distribution":
+        return node.uiKit?.stackView.map { .string($0.distribution) }
+    case "stack.spacing", "stackview.spacing":
+        return node.uiKit?.stackView.map { .double($0.spacing) }
+    case "stack.layoutmarginsrelativearrangement", "stackview.layoutmarginsrelativearrangement":
+        return node.uiKit?.stackView.map { .bool($0.isLayoutMarginsRelativeArrangement) }
     default:
         return nil
     }
@@ -854,6 +874,9 @@ private var viewMutationDescriptors: [LoupeMutationDescriptor] {
         },
         mutation(["tag", "uiKit.tag"]) { view, value in
             view.tag = try intValue(value)
+        },
+        mutation(["layout.translatesAutoresizingMaskIntoConstraints", "translatesAutoresizingMaskIntoConstraints"]) { view, value in
+            view.translatesAutoresizingMaskIntoConstraints = try boolValue(value)
         },
         mutation(["layout.hugging.horizontal"]) { view, value in
             view.setContentHuggingPriority(UILayoutPriority(Float(try doubleValue(value))), for: .horizontal)
@@ -1910,6 +1933,8 @@ private func uiKitProperties(for view: UIView) -> LoupeUIKitProperties {
         gestureRecognizers: view.gestureRecognizers?.map { typeName(of: $0) } ?? [],
         isFirstResponder: view.isFirstResponder,
         windowLevel: (view as? UIWindow).flatMap { finiteDouble($0.windowLevel.rawValue.doubleValue) },
+        layout: layoutProperties(for: view),
+        stackView: stackViewProperties(for: view),
         control: controlProperties(for: view),
         label: labelProperties(for: view),
         button: buttonProperties(for: view),
@@ -1929,6 +1954,81 @@ private func uiKitProperties(for view: UIView) -> LoupeUIKitProperties {
         tabBar: tabBarProperties(for: view),
         webView: webViewProperties(for: view)
     )
+}
+
+@MainActor
+private func layoutProperties(for view: UIView) -> LoupeUILayoutProperties {
+    LoupeUILayoutProperties(
+        translatesAutoresizingMaskIntoConstraints: view.translatesAutoresizingMaskIntoConstraints,
+        hugging: LoupeUILayoutPriorities(
+            horizontal: finiteDouble(Double(view.contentHuggingPriority(for: .horizontal).rawValue)) ?? 0,
+            vertical: finiteDouble(Double(view.contentHuggingPriority(for: .vertical).rawValue)) ?? 0
+        ),
+        compressionResistance: LoupeUILayoutPriorities(
+            horizontal: finiteDouble(Double(view.contentCompressionResistancePriority(for: .horizontal).rawValue)) ?? 0,
+            vertical: finiteDouble(Double(view.contentCompressionResistancePriority(for: .vertical).rawValue)) ?? 0
+        ),
+        constraints: view.constraints.prefix(20).map(layoutConstraintProperties),
+        affectingHorizontalConstraints: view.constraintsAffectingLayout(for: .horizontal)
+            .prefix(20)
+            .map(layoutConstraintProperties),
+        affectingVerticalConstraints: view.constraintsAffectingLayout(for: .vertical)
+            .prefix(20)
+            .map(layoutConstraintProperties)
+    )
+}
+
+@MainActor
+private func stackViewProperties(for view: UIView) -> LoupeUIStackViewProperties? {
+    guard let stackView = view as? UIStackView else {
+        return nil
+    }
+    return LoupeUIStackViewProperties(
+        axis: layoutConstraintAxisName(stackView.axis),
+        alignment: stackAlignmentName(stackView.alignment),
+        distribution: stackDistributionName(stackView.distribution),
+        spacing: finiteDouble(Double(stackView.spacing)) ?? 0,
+        isBaselineRelativeArrangement: stackView.isBaselineRelativeArrangement,
+        isLayoutMarginsRelativeArrangement: stackView.isLayoutMarginsRelativeArrangement,
+        arrangedSubviewCount: stackView.arrangedSubviews.count
+    )
+}
+
+@MainActor
+private func layoutConstraintProperties(_ constraint: NSLayoutConstraint) -> LoupeUILayoutConstraintProperties {
+    LoupeUILayoutConstraintProperties(
+        identifier: constraint.identifier,
+        firstItem: layoutItemDescription(constraint.firstItem),
+        firstAttribute: layoutAttributeName(constraint.firstAttribute),
+        relation: layoutRelationName(constraint.relation),
+        secondItem: layoutItemDescription(constraint.secondItem),
+        secondAttribute: layoutAttributeName(constraint.secondAttribute),
+        multiplier: finiteDouble(Double(constraint.multiplier)) ?? 0,
+        constant: finiteDouble(Double(constraint.constant)) ?? 0,
+        priority: finiteDouble(Double(constraint.priority.rawValue)) ?? 0,
+        isActive: constraint.isActive
+    )
+}
+
+@MainActor
+private func layoutItemDescription(_ item: Any?) -> String? {
+    guard let item else {
+        return nil
+    }
+    let object = item as AnyObject
+    if let view = object as? UIView {
+        if let identifier = view.accessibilityIdentifier, !identifier.isEmpty {
+            return "\(typeName(of: view))#\(identifier)"
+        }
+        return typeName(of: view)
+    }
+    if let guide = object as? UILayoutGuide {
+        if !guide.identifier.isEmpty {
+            return "\(typeName(of: guide))#\(guide.identifier)"
+        }
+        return typeName(of: guide)
+    }
+    return typeName(of: object)
 }
 
 @MainActor
@@ -2622,6 +2722,73 @@ private func borderStyleName(_ style: UITextField.BorderStyle) -> String {
     case .line: return "line"
     case .bezel: return "bezel"
     case .roundedRect: return "roundedRect"
+    @unknown default: return "unknown"
+    }
+}
+
+private func layoutConstraintAxisName(_ axis: NSLayoutConstraint.Axis) -> String {
+    switch axis {
+    case .horizontal: return "horizontal"
+    case .vertical: return "vertical"
+    @unknown default: return "unknown"
+    }
+}
+
+private func layoutAttributeName(_ attribute: NSLayoutConstraint.Attribute) -> String {
+    switch attribute {
+    case .left: return "left"
+    case .right: return "right"
+    case .top: return "top"
+    case .bottom: return "bottom"
+    case .leading: return "leading"
+    case .trailing: return "trailing"
+    case .width: return "width"
+    case .height: return "height"
+    case .centerX: return "centerX"
+    case .centerY: return "centerY"
+    case .lastBaseline: return "lastBaseline"
+    case .firstBaseline: return "firstBaseline"
+    case .leftMargin: return "leftMargin"
+    case .rightMargin: return "rightMargin"
+    case .topMargin: return "topMargin"
+    case .bottomMargin: return "bottomMargin"
+    case .leadingMargin: return "leadingMargin"
+    case .trailingMargin: return "trailingMargin"
+    case .centerXWithinMargins: return "centerXWithinMargins"
+    case .centerYWithinMargins: return "centerYWithinMargins"
+    case .notAnAttribute: return "notAnAttribute"
+    @unknown default: return "unknown"
+    }
+}
+
+private func layoutRelationName(_ relation: NSLayoutConstraint.Relation) -> String {
+    switch relation {
+    case .lessThanOrEqual: return "lessThanOrEqual"
+    case .equal: return "equal"
+    case .greaterThanOrEqual: return "greaterThanOrEqual"
+    @unknown default: return "unknown"
+    }
+}
+
+private func stackAlignmentName(_ alignment: UIStackView.Alignment) -> String {
+    switch alignment {
+    case .fill: return "fill"
+    case .leading: return "leading"
+    case .firstBaseline: return "firstBaseline"
+    case .center: return "center"
+    case .trailing: return "trailing"
+    case .lastBaseline: return "lastBaseline"
+    @unknown default: return "unknown"
+    }
+}
+
+private func stackDistributionName(_ distribution: UIStackView.Distribution) -> String {
+    switch distribution {
+    case .fill: return "fill"
+    case .fillEqually: return "fillEqually"
+    case .fillProportionally: return "fillProportionally"
+    case .equalSpacing: return "equalSpacing"
+    case .equalCentering: return "equalCentering"
     @unknown default: return "unknown"
     }
 }
