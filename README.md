@@ -48,6 +48,7 @@ If you want direct CLI control:
 ```bash
 loupe start --bundle-id com.example.App --device booted
 loupe current
+loupe capture-report --bundle-id com.example.App --output loupe-report
 ```
 
 When multiple simulators are booted, pass an exact UDID. Loupe chooses an
@@ -61,12 +62,19 @@ loupe tree --udid <UDID> --accessibility --depth 3
 loupe tree --udid <UDID> --view --depth 3
 loupe current
 loupe fetch <runtime-host>/snapshot --output snapshot.json
+loupe capture-report --udid <UDID> --output loupe-report
+loupe screen-map snapshot.json --limit 80
+loupe paint-stack snapshot.json --point 201,319
 loupe inspect snapshot.json --test-id checkout.payButton
 loupe compact snapshot.json
 ```
 
 Use accessibility for targets and text. Use the view tree for layout, UIKit
-properties, color, size, and mutation refs.
+properties, color, size, and mutation refs. Use `screen-map` when you need a
+DOM-like visible element summary for design iteration. Use `capture-report` when
+you need screenshot review and runtime structure checks in the same artifact
+bundle. Use `paint-stack` when a color, image, or mutated view appears hidden by
+another same-frame child or overlay.
 
 ## Act
 

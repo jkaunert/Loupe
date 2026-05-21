@@ -1,6 +1,6 @@
 import Foundation
 
-public enum LoupeLayoutIssueKind: String, Codable, Equatable {
+public enum LoupeLayoutIssueKind: String, Codable, Equatable, CaseIterable {
     case overlappingSiblings
     case childOutsideParent
     case duplicateTestID
@@ -146,6 +146,7 @@ public enum LoupeLayoutAuditor {
     private static func duplicateTestIDIssues(in snapshot: LoupeSnapshot) -> [LoupeLayoutIssue] {
         let groups = Dictionary(grouping: snapshot.nodes.values.compactMap { node -> (String, LoupeNode)? in
             guard let testID = node.testID, !testID.isEmpty else { return nil }
+            guard shouldAuditDuplicateTestID(node) else { return nil }
             return (testID, node)
         }, by: { $0.0 })
 
@@ -162,6 +163,15 @@ public enum LoupeLayoutAuditor {
                 )
             }
         }
+    }
+
+    private static func shouldAuditDuplicateTestID(_ node: LoupeNode) -> Bool {
+        if node.isInteractive { return true }
+        if node.accessibility?.isElement == true { return true }
+        if node.role == "image" || node.typeName == "UIImageView" {
+            return false
+        }
+        return true
     }
 
     private static func interactiveIssues(

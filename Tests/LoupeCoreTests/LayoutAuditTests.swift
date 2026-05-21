@@ -81,12 +81,14 @@ struct LayoutAuditTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: false,
-                    children: ["small", "missing", "duplicate-a", "duplicate-b"]
+                    children: ["small", "missing", "duplicate-a", "duplicate-b", "image-a", "image-b"]
                 ),
                 "small": button(ref: "small", testID: "small.button", frame: LoupeRect(x: 20, y: 20, width: 30, height: 30)),
                 "missing": button(ref: "missing", testID: nil, frame: LoupeRect(x: 20, y: 80, width: 80, height: 44)),
                 "duplicate-a": button(ref: "duplicate-a", testID: "duplicate.button", frame: LoupeRect(x: 20, y: 140, width: 80, height: 44)),
                 "duplicate-b": button(ref: "duplicate-b", testID: "duplicate.button", frame: LoupeRect(x: 120, y: 140, width: 80, height: 44)),
+                "image-a": decorativeImage(ref: "image-a", testID: "chevron.right", frame: LoupeRect(x: 20, y: 210, width: 12, height: 16)),
+                "image-b": decorativeImage(ref: "image-b", testID: "chevron.right", frame: LoupeRect(x: 120, y: 210, width: 12, height: 16)),
             ]
         )
 
@@ -95,6 +97,7 @@ struct LayoutAuditTests {
         #expect(audit.issues.contains { $0.kind == .smallInteractiveTarget && $0.testID == "small.button" })
         #expect(audit.issues.contains { $0.kind == .missingTestID && $0.ref == "missing" })
         #expect(audit.issues.filter { $0.kind == .duplicateTestID }.count == 2)
+        #expect(!audit.issues.contains { $0.kind == .duplicateTestID && $0.testID == "chevron.right" })
     }
 
     private func button(ref: String, testID: String?, frame: LoupeRect) -> LoupeNode {
@@ -117,6 +120,39 @@ struct LayoutAuditTests {
                 isOpaque: false,
                 clipsToBounds: false,
                 userInteractionEnabled: true,
+                isFirstResponder: false
+            )
+        )
+    }
+
+    private func decorativeImage(ref: String, testID: String, frame: LoupeRect) -> LoupeNode {
+        LoupeNode(
+            ref: ref,
+            parentRef: "root",
+            kind: .view,
+            typeName: "UIImageView",
+            role: "image",
+            testID: testID,
+            label: "Forward",
+            frame: frame,
+            isVisible: true,
+            isEnabled: true,
+            isInteractive: false,
+            accessibility: LoupeAccessibility(
+                identifier: testID,
+                label: "Forward",
+                traits: ["image"],
+                frame: frame,
+                isElement: false
+            ),
+            uiKit: LoupeUIKitProperties(
+                className: "UIImageView",
+                tag: 0,
+                alpha: 1,
+                isHidden: false,
+                isOpaque: false,
+                clipsToBounds: false,
+                userInteractionEnabled: false,
                 isFirstResponder: false
             )
         )

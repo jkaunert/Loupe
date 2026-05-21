@@ -130,6 +130,30 @@ struct RuntimeTests {
         #expect(node.uiKit?.webView?.title == "Web Fixture")
     }
 
+    @Test func scrollViewPropertiesDecodeOlderSnapshots() throws {
+        let data = Data(
+            """
+            {
+              "contentOffset": { "x": 0, "y": 120 },
+              "contentSize": { "width": 390, "height": 1200 },
+              "adjustedContentInset": { "top": 0, "left": 0, "bottom": 34, "right": 0 },
+              "isScrollEnabled": true,
+              "alwaysBounceVertical": true,
+              "alwaysBounceHorizontal": false
+            }
+            """.utf8
+        )
+
+        let scrollView = try JSONDecoder().decode(LoupeUIScrollViewProperties.self, from: data)
+
+        #expect(scrollView.contentInset == LoupeInsets(top: 0, left: 0, bottom: 0, right: 0))
+        #expect(scrollView.scrollIndicatorInsets == LoupeInsets(top: 0, left: 0, bottom: 0, right: 0))
+        #expect(scrollView.isPagingEnabled == false)
+        #expect(scrollView.bounces == true)
+        #expect(scrollView.showsVerticalScrollIndicator == true)
+        #expect(scrollView.showsHorizontalScrollIndicator == true)
+    }
+
     @Test func snapshotNodeCanCarryLayoutAndStackViewProperties() {
         let node = LoupeNode(
             ref: "stack",

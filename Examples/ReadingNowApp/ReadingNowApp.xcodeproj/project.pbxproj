@@ -1,0 +1,285 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		RN0000000000000000000011 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = RN0000000000000000000021 /* AppDelegate.swift */; };
+		RN0000000000000000000012 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = RN0000000000000000000022 /* SceneDelegate.swift */; };
+		RN0000000000000000000013 /* ReadingNowViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = RN0000000000000000000023 /* ReadingNowViewController.swift */; };
+		RN0000000000000000000014 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = RN0000000000000000000025 /* LaunchScreen.storyboard */; };
+		RN0000000000000000000015 /* avatar.png in Resources */ = {isa = PBXBuildFile; fileRef = RN0000000000000000000031 /* avatar.png */; };
+		RN0000000000000000000016 /* book-current.png in Resources */ = {isa = PBXBuildFile; fileRef = RN0000000000000000000032 /* book-current.png */; };
+		RN0000000000000000000017 /* book-meow.png in Resources */ = {isa = PBXBuildFile; fileRef = RN0000000000000000000033 /* book-meow.png */; };
+		RN0000000000000000000018 /* book-icecream.png in Resources */ = {isa = PBXBuildFile; fileRef = RN0000000000000000000034 /* book-icecream.png */; };
+		RN0000000000000000000019 /* book-dordogne.png in Resources */ = {isa = PBXBuildFile; fileRef = RN0000000000000000000035 /* book-dordogne.png */; };
+		RN000000000000000000001A /* book-sunset.png in Resources */ = {isa = PBXBuildFile; fileRef = RN0000000000000000000036 /* book-sunset.png */; };
+		RN000000000000000000001B /* book-hidden.png in Resources */ = {isa = PBXBuildFile; fileRef = RN0000000000000000000037 /* book-hidden.png */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		RN0000000000000000000020 /* ReadingNowApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReadingNowApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		RN0000000000000000000021 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		RN0000000000000000000022 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		RN0000000000000000000023 /* ReadingNowViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingNowViewController.swift; sourceTree = "<group>"; };
+		RN0000000000000000000024 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		RN0000000000000000000025 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		RN0000000000000000000031 /* avatar.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = avatar.png; sourceTree = "<group>"; };
+		RN0000000000000000000032 /* book-current.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "book-current.png"; sourceTree = "<group>"; };
+		RN0000000000000000000033 /* book-meow.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "book-meow.png"; sourceTree = "<group>"; };
+		RN0000000000000000000034 /* book-icecream.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "book-icecream.png"; sourceTree = "<group>"; };
+		RN0000000000000000000035 /* book-dordogne.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "book-dordogne.png"; sourceTree = "<group>"; };
+		RN0000000000000000000036 /* book-sunset.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "book-sunset.png"; sourceTree = "<group>"; };
+		RN0000000000000000000037 /* book-hidden.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "book-hidden.png"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		RN0000000000000000000040 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		RN0000000000000000000050 = {
+			isa = PBXGroup;
+			children = (
+				RN0000000000000000000051 /* ReadingNowApp */,
+				RN0000000000000000000052 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		RN0000000000000000000051 /* ReadingNowApp */ = {
+			isa = PBXGroup;
+			children = (
+				RN0000000000000000000021 /* AppDelegate.swift */,
+				RN0000000000000000000022 /* SceneDelegate.swift */,
+				RN0000000000000000000023 /* ReadingNowViewController.swift */,
+				RN0000000000000000000024 /* Info.plist */,
+				RN0000000000000000000025 /* LaunchScreen.storyboard */,
+				RN0000000000000000000053 /* Assets */,
+			);
+			path = ReadingNowApp;
+			sourceTree = "<group>";
+		};
+		RN0000000000000000000052 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				RN0000000000000000000020 /* ReadingNowApp.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		RN0000000000000000000053 /* Assets */ = {
+			isa = PBXGroup;
+			children = (
+				RN0000000000000000000031 /* avatar.png */,
+				RN0000000000000000000032 /* book-current.png */,
+				RN0000000000000000000033 /* book-meow.png */,
+				RN0000000000000000000034 /* book-icecream.png */,
+				RN0000000000000000000035 /* book-dordogne.png */,
+				RN0000000000000000000036 /* book-sunset.png */,
+				RN0000000000000000000037 /* book-hidden.png */,
+			);
+			path = Assets;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		RN0000000000000000000060 /* ReadingNowApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = RN0000000000000000000090 /* Build configuration list for PBXNativeTarget "ReadingNowApp" */;
+			buildPhases = (
+				RN0000000000000000000061 /* Sources */,
+				RN0000000000000000000040 /* Frameworks */,
+				RN0000000000000000000062 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ReadingNowApp;
+			productName = ReadingNowApp;
+			productReference = RN0000000000000000000020 /* ReadingNowApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		RN0000000000000000000070 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 2630;
+				LastUpgradeCheck = 2630;
+				TargetAttributes = {
+					RN0000000000000000000060 = {
+						CreatedOnToolsVersion = 26.3;
+					};
+				};
+			};
+			buildConfigurationList = RN0000000000000000000080 /* Build configuration list for PBXProject "ReadingNowApp" */;
+			compatibilityVersion = "Xcode 16.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = RN0000000000000000000050;
+			productRefGroup = RN0000000000000000000052 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				RN0000000000000000000060 /* ReadingNowApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		RN0000000000000000000062 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				RN0000000000000000000014 /* LaunchScreen.storyboard in Resources */,
+				RN0000000000000000000015 /* avatar.png in Resources */,
+				RN0000000000000000000016 /* book-current.png in Resources */,
+				RN0000000000000000000017 /* book-meow.png in Resources */,
+				RN0000000000000000000018 /* book-icecream.png in Resources */,
+				RN0000000000000000000019 /* book-dordogne.png in Resources */,
+				RN000000000000000000001A /* book-sunset.png in Resources */,
+				RN000000000000000000001B /* book-hidden.png in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		RN0000000000000000000061 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				RN0000000000000000000011 /* AppDelegate.swift in Sources */,
+				RN0000000000000000000012 /* SceneDelegate.swift in Sources */,
+				RN0000000000000000000013 /* ReadingNowViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		RN0000000000000000000081 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+			};
+			name = Debug;
+		};
+		RN0000000000000000000082 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				COPY_PHASE_STRIP = NO;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		RN0000000000000000000091 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				INFOPLIST_FILE = ReadingNowApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.loupe.readingnow;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1";
+			};
+			name = Debug;
+		};
+		RN0000000000000000000092 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				INFOPLIST_FILE = ReadingNowApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.loupe.readingnow;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		RN0000000000000000000080 /* Build configuration list for PBXProject "ReadingNowApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				RN0000000000000000000081 /* Debug */,
+				RN0000000000000000000082 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		RN0000000000000000000090 /* Build configuration list for PBXNativeTarget "ReadingNowApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				RN0000000000000000000091 /* Debug */,
+				RN0000000000000000000092 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = RN0000000000000000000070 /* Project object */;
+}

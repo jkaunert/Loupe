@@ -40,9 +40,19 @@ Compare a Loupe snapshot to design nodes in this order:
 ## Command
 
 ```bash
+loupe capture-report --bundle-id com.example.App --output loupe-report
+loupe screen-map snapshot.json --limit 120
+loupe paint-stack snapshot.json --point 201,319
 loupe compare-design snapshot.json figma-export.json
 loupe compare-design snapshot.json figma-export.json --json
 ```
+
+Use `capture-report` when a design loop needs both screenshot judgment and
+runtime structure. Use `screen-map` before a formal comparison when an agent
+needs a DOM-like runtime summary. Use `paint-stack` when a visual target is
+covered by an overlay, content view, blur view, or same-frame child. These
+outputs are intentionally not Figma-specific: the same artifacts can be compared
+with a Figma export, a hand-written fixture, or another runtime snapshot.
 
 The command reports:
 

@@ -33,6 +33,8 @@ struct LoupeCLI {
             try audit(arguments)
         case "compact":
             try compact(arguments)
+        case "capture-report":
+            try await captureReport(arguments)
         case "compare-design":
             try compareDesign(arguments)
         case "constraints":
@@ -63,6 +65,8 @@ struct LoupeCLI {
             try await runtimeFetch(arguments, path: "/runtime", usage: "loupe runtime [--host <url>] [--udid <sim>] [--output <path>]")
         case "mutations":
             try await mutations(arguments)
+        case "paint-stack":
+            try await paintStack(arguments)
         case "set-many":
             try await setMany(arguments)
         case "set", "mutate":
@@ -75,6 +79,8 @@ struct LoupeCLI {
             try await launch(arguments)
         case "screenshot":
             try screenshot(arguments)
+        case "screen-map":
+            try await screenMap(arguments)
         case "skills":
             try skills(arguments)
         case "start":
@@ -124,6 +130,202 @@ struct LoupeCLI {
         encoder.dateEncodingStrategy = .iso8601
         FileHandle.standardOutput.write(try encoder.encode(observation))
         FileHandle.standardOutput.write(Data("\n".utf8))
+    }
+
+    private static func screenMap(_ arguments: [String]) async throws {
+        let options = try ScreenMapOptions(arguments)
+        let snapshot: LoupeSnapshot
+        if let snapshotURL = options.snapshotURL {
+            snapshot = try decodeSnapshot(from: snapshotURL)
+        } else {
+            let host = try await resolvedRuntimeHost(
+                requestedHost: options.host,
+                hostWasExplicit: options.hostWasExplicit,
+                udid: options.udid,
+                bundleID: options.bundleID
+            )
+            if let udid = options.udid {
+                try await validateRuntimeIdentity(host: host, expectedUDID: udid, timeout: options.timeout)
+            }
+            snapshot = try await fetchSnapshot(host: host, timeout: options.timeout)
+        }
+
+        let map = LoupeScreenMapper.map(
+            snapshot,
+            options: LoupeScreenMapOptions(
+                includeHidden: options.includeHidden,
+                includeContainers: options.includeContainers,
+                maxElements: options.maxElements
+            )
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        FileHandle.standardOutput.write(try encoder.encode(map))
+        FileHandle.standardOutput.write(Data("\n".utf8))
+    }
+
+    private static func captureReport(_ arguments: [String]) async throws {
+        let options = try CaptureReportOptions(arguments)
+        let host = try await resolvedRuntimeHost(
+            requestedHost: options.host,
+            hostWasExplicit: options.hostWasExplicit,
+            udid: options.udid,
+            bundleID: options.bundleID
+        )
+        if let udid = options.udid {
+            try await validateRuntimeIdentity(host: host, expectedUDID: udid, timeout: options.timeout)
+        }
+
+        try FileManager.default.createDirectory(
+            at: options.outputDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let runtimeState = try? await fetchRuntimeState(host: host, timeout: options.timeout)
+        let snapshot = try await fetchSnapshot(host: host, timeout: options.timeout)
+        let accessibilityTree = try await fetchAccessibilityTree(
+            host: host,
+            fallbackSnapshot: snapshot,
+            timeout: options.timeout
+        )
+        let compact = LoupeObservationCompactor.compact(snapshot)
+        let screenMap = LoupeScreenMapper.map(
+            snapshot,
+            options: LoupeScreenMapOptions(maxElements: options.screenMapLimit)
+        )
+        let audit = LoupeLayoutAuditor.audit(snapshot)
+        let scrollViews = captureReportScrollViews(snapshot)
+
+        let screenshotURL = options.outputDirectory.appendingPathComponent("screenshot.png")
+        let snapshotURL = options.outputDirectory.appendingPathComponent("snapshot.json")
+        let screenMapURL = options.outputDirectory.appendingPathComponent("screen-map.json")
+        let accessibilityURL = options.outputDirectory.appendingPathComponent("accessibility.json")
+        let compactURL = options.outputDirectory.appendingPathComponent("compact.json")
+        let auditURL = options.outputDirectory.appendingPathComponent("audit.json")
+        let runtimeURL = options.outputDirectory.appendingPathComponent("runtime.json")
+        let summaryURL = options.outputDirectory.appendingPathComponent("summary.json")
+        let summaryMarkdownURL = options.outputDirectory.appendingPathComponent("summary.md")
+
+        try writeJSON(snapshot, to: snapshotURL)
+        try writeJSON(screenMap, to: screenMapURL)
+        try writeJSON(accessibilityTree, to: accessibilityURL)
+        try writeJSON(compact, to: compactURL)
+        try writeJSON(audit, to: auditURL)
+        if let runtimeState {
+            try writeJSON(runtimeState, to: runtimeURL)
+        }
+
+        let screenshotUDID = options.udid ?? runtimeState?.identity.simulatorUDID ?? "booted"
+        try captureSimulatorScreenshot(udid: screenshotUDID, outputURL: screenshotURL)
+
+        let report = CaptureReport(
+            capturedAt: Date(),
+            host: host.absoluteString,
+            udid: runtimeState?.identity.simulatorUDID ?? options.udid,
+            bundleID: runtimeState?.identity.bundleIdentifier ?? options.bundleID,
+            snapshotID: snapshot.id,
+            screen: snapshot.screen,
+            artifacts: CaptureReportArtifacts(
+                screenshot: screenshotURL.path,
+                snapshot: snapshotURL.path,
+                screenMap: screenMapURL.path,
+                accessibility: accessibilityURL.path,
+                compact: compactURL.path,
+                audit: auditURL.path,
+                runtime: runtimeState == nil ? nil : runtimeURL.path,
+                summaryMarkdown: summaryMarkdownURL.path
+            ),
+            counts: CaptureReportCounts(
+                nodes: snapshot.nodes.count,
+                screenMapElements: screenMap.elements.count,
+                visibleTexts: compact.visibleTexts.count,
+                interactiveElements: compact.interactive.count,
+                accessibilityNodes: accessibilityTree.nodes.count,
+                auditIssues: audit.issueCount,
+                scrollViews: scrollViews.count,
+                scrollableScrollViews: scrollViews.filter { !$0.scrollableAxes.isEmpty }.count
+            ),
+            scrollViews: scrollViews,
+            auditIssuesByKind: Dictionary(
+                grouping: audit.issues,
+                by: { $0.kind.rawValue }
+            ).mapValues(\.count),
+            topAuditIssues: audit.issues.prefix(10).map { issue in
+                CaptureReportAuditIssue(issue: issue, node: snapshot.nodes[issue.ref])
+            }
+        )
+
+        try writeJSON(report, to: summaryURL)
+        try renderCaptureReportMarkdown(report).write(to: summaryMarkdownURL, atomically: true, encoding: .utf8)
+        print("report: \(options.outputDirectory.path)")
+        print("screenshot: \(screenshotURL.path)")
+        print("summary: \(summaryURL.path)")
+        print("screen-map: \(screenMapURL.path)")
+    }
+
+    private static func captureReportScrollViews(_ snapshot: LoupeSnapshot) -> [CaptureReportScrollView] {
+        snapshot.nodes.values
+            .compactMap { node -> CaptureReportScrollView? in
+                guard let scrollView = node.uiKit?.scrollView else { return nil }
+                return CaptureReportScrollView(node: node, scrollView: scrollView)
+            }
+            .sorted { lhs, rhs in
+                if lhs.scrollableAxes.isEmpty != rhs.scrollableAxes.isEmpty {
+                    return !lhs.scrollableAxes.isEmpty
+                }
+                let lhsFrame = lhs.frame
+                let rhsFrame = rhs.frame
+                if let lhsFrame, let rhsFrame, abs(lhsFrame.y - rhsFrame.y) > 0.5 {
+                    return lhsFrame.y < rhsFrame.y
+                }
+                return lhs.ref < rhs.ref
+            }
+    }
+
+    private static func paintStack(_ arguments: [String]) async throws {
+        let options = try PaintStackOptions(arguments)
+        let snapshot: LoupeSnapshot
+        if let snapshotURL = options.snapshotURL {
+            snapshot = try decodeSnapshot(from: snapshotURL)
+        } else {
+            let host = try await resolvedRuntimeHost(
+                requestedHost: options.host,
+                hostWasExplicit: options.hostWasExplicit,
+                udid: options.udid,
+                bundleID: options.bundleID
+            )
+            if let udid = options.udid {
+                try await validateRuntimeIdentity(host: host, expectedUDID: udid, timeout: options.timeout)
+            }
+            snapshot = try await fetchSnapshot(host: host, timeout: options.timeout)
+        }
+
+        let stack: LoupePaintStack
+        if let point = options.point {
+            stack = LoupePaintStackBuilder.stack(
+                in: snapshot,
+                at: point,
+                maxEntries: options.maxEntries
+            )
+        } else if let ref = options.ref {
+            stack = try LoupePaintStackBuilder.stack(
+                in: snapshot,
+                centeredOn: ref,
+                maxEntries: options.maxEntries
+            )
+        } else {
+            throw CLIError("paint-stack requires --point x,y or --ref <ref>")
+        }
+
+        if options.json {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            FileHandle.standardOutput.write(try encoder.encode(stack))
+            FileHandle.standardOutput.write(Data("\n".utf8))
+        } else {
+            printPaintStack(stack)
+        }
     }
 
     private static func query(_ arguments: [String]) async throws {
@@ -299,20 +501,31 @@ struct LoupeCLI {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let snapshot = try decoder.decode(LoupeSnapshot.self, from: data)
-        let audit = LoupeLayoutAuditor.audit(
-            snapshot,
-            options: LoupeLayoutAuditOptions(
-                tolerance: options.tolerance,
-                minOverlapArea: options.minOverlapArea,
-                minTouchTarget: options.minTouchTarget,
-                minContrastRatio: options.minContrastRatio
-            )
+        let audit = filteredAudit(
+            LoupeLayoutAuditor.audit(
+                snapshot,
+                options: LoupeLayoutAuditOptions(
+                    tolerance: options.tolerance,
+                    minOverlapArea: options.minOverlapArea,
+                    minTouchTarget: options.minTouchTarget,
+                    minContrastRatio: options.minContrastRatio
+                )
+            ),
+            options: options
         )
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         FileHandle.standardOutput.write(try encoder.encode(audit))
         FileHandle.standardOutput.write(Data("\n".utf8))
+    }
+
+    private static func filteredAudit(_ audit: LoupeLayoutAudit, options: AuditOptions) -> LoupeLayoutAudit {
+        let issues = audit.issues.filter { issue in
+            (options.kinds.isEmpty || options.kinds.contains(issue.kind))
+                && !options.excludedKinds.contains(issue.kind)
+        }
+        return LoupeLayoutAudit(snapshotID: audit.snapshotID, issues: issues)
     }
 
     private static func diff(_ arguments: [String]) throws {
@@ -650,6 +863,9 @@ struct LoupeCLI {
               compact <snapshot.json>
                   Print the LLM-facing compact observation for a full app snapshot.
 
+              capture-report [--host <url>] [--udid <sim>] [--bundle-id <id>] --output <dir>
+                  Capture screenshot plus runtime structure artifacts for design iteration.
+
               constraints [snapshot.json] (--ref <ref> | --test-id <id> | --text <text>) [--json]
                   Print Auto Layout constraints captured for a matched view node.
 
@@ -708,7 +924,7 @@ struct LoupeCLI {
               trace-summary <trace-dir> [--json] [--limit <n>]
                   Summarize an action trace bundle, including target, errors, logs, and snapshot diff.
 
-              audit <snapshot.json> [--tolerance <points>] [--min-overlap-area <points2>]
+              audit <snapshot.json> [--tolerance <points>] [--min-overlap-area <points2>] [--kind <kind>] [--exclude-kind <kind>]
                   Report layout, target-size, testID, and contrast issues.
 
               query [snapshot.json] (--test-id <id> | --text <text> | --role <role> | --ref <ref>) [--bundle-id <id>] [--tree view|accessibility]
@@ -722,6 +938,9 @@ struct LoupeCLI {
 
               mutations (--ref <ref> | --text <text> | --test-id <id>)
                   Print mutation properties that are useful for one matched node.
+
+              paint-stack [snapshot.json] (--point x,y | --ref <ref>) [--json]
+                  Print visible nodes at a screen point in top-to-bottom paint order.
 
               set-many (--refs <refs> | --type-name <name> | --role <role>) <property> (--value <value> | --number <n> | --bool <bool> | --color <color> | --colors <colors>)
                   Apply one property to multiple runtime nodes and write before/after/diff artifacts.
@@ -755,6 +974,9 @@ struct LoupeCLI {
 
               screenshot --udid <sim> --output <path> [--timeout <seconds>]
                   Capture a simulator screenshot through simctl.
+
+              screen-map [snapshot.json] [--host <url>] [--udid <sim>] [--bundle-id <id>] [--include-containers] [--limit <n>]
+                  Print visible semantic and styled runtime elements as compact JSON.
 
               skills install [--target all|codex|claude] [--source <skills/loupe>]
                   Upsert the Loupe skill into existing Codex or Claude Code skill folders.
@@ -795,6 +1017,8 @@ struct LoupeCLI {
             return BatchMutationOptions.usage
         case "set", "mutate":
             return MutationSetOptions.usage
+        case "capture-report":
+            return "Usage: loupe capture-report [--host <url>] [--udid <sim>] [--bundle-id <id>] --output <dir> [--screen-map-limit <n>] [--timeout <seconds>]"
         case "diff":
             return "Usage: loupe diff <before-snapshot.json> <after-snapshot.json> [--json] [--changed-only] [--limit <n>]"
         case "trace-summary":
@@ -814,6 +1038,8 @@ struct LoupeCLI {
             """
         case "text-map":
             return "Usage: loupe text-map [snapshot.json] [--host <url>] [--udid <sim>] [--bundle-id <id>] [--accessibility]"
+        case "screen-map":
+            return "Usage: loupe screen-map [snapshot.json] [--host <url>] [--udid <sim>] [--bundle-id <id>] [--include-hidden] [--include-containers] [--limit <n>]"
         case "runtimes", "apps":
             return "Usage: loupe runtimes [--json] [--timeout <seconds>]"
         case "mutations":
@@ -823,11 +1049,47 @@ struct LoupeCLI {
 
             List runtime mutation capabilities globally or for one matched node.
             """
+        case "paint-stack":
+            return "Usage: loupe paint-stack [snapshot.json] (--point x,y | --ref <ref>) [--host <url>] [--udid <sim>] [--bundle-id <id>] [--limit <n>] [--json]"
         case "current":
             return "Usage: loupe current [--json] [--timeout <seconds>]"
         default:
             return nil
         }
+    }
+
+    private static func printPaintStack(_ stack: LoupePaintStack) {
+        print("point: \(format(stack.point.x)),\(format(stack.point.y))")
+        if let sourceRef = stack.sourceRef {
+            print("sourceRef: \(sourceRef)")
+        }
+        print("top")
+        for entry in stack.entries {
+            var parts: [String] = [
+                entry.ref,
+                entry.className ?? entry.typeName,
+            ]
+            if let testID = entry.testID {
+                parts.append("#\(testID)")
+            }
+            if let text = entry.text {
+                parts.append("text=\"\(text)\"")
+            }
+            parts.append("frame=\(format(entry.frame))")
+            if let color = entry.style?.backgroundColor, color.alpha > 0 {
+                parts.append("background=\(format(color))")
+            }
+            print(parts.joined(separator: " "))
+        }
+        print("bottom")
+    }
+
+    private static func format(_ rect: LoupeRect) -> String {
+        "\(format(rect.x)),\(format(rect.y)),\(format(rect.width)),\(format(rect.height))"
+    }
+
+    private static func format(_ color: LoupeColor) -> String {
+        "\(format(color.red)),\(format(color.green)),\(format(color.blue)),\(format(color.alpha))"
     }
 
     private static func mutations(_ arguments: [String]) async throws {
@@ -2012,6 +2274,87 @@ struct LoupeCLI {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         try encoder.encode(value).write(to: url)
+    }
+
+    private static func renderCaptureReportMarkdown(_ report: CaptureReport) -> String {
+        var lines: [String] = [
+            "# Loupe Capture Report",
+            "",
+            "- host: \(report.host)",
+            "- bundleID: \(report.bundleID ?? "unknown")",
+            "- udid: \(report.udid ?? "unknown")",
+            "- snapshotID: \(report.snapshotID)",
+            "- screen: \(format(report.screen.size.width))x\(format(report.screen.size.height)) @\(format(report.screen.scale))x",
+            "",
+            "## Artifacts",
+            "",
+            "- screenshot: \(report.artifacts.screenshot)",
+            "- snapshot: \(report.artifacts.snapshot)",
+            "- screen-map: \(report.artifacts.screenMap)",
+            "- accessibility: \(report.artifacts.accessibility)",
+            "- compact: \(report.artifacts.compact)",
+            "- audit: \(report.artifacts.audit)",
+        ]
+        if let runtime = report.artifacts.runtime {
+            lines.append("- runtime: \(runtime)")
+        }
+        lines += [
+            "",
+            "## Counts",
+            "",
+            "- nodes: \(report.counts.nodes)",
+            "- screenMapElements: \(report.counts.screenMapElements)",
+            "- visibleTexts: \(report.counts.visibleTexts)",
+            "- interactiveElements: \(report.counts.interactiveElements)",
+            "- accessibilityNodes: \(report.counts.accessibilityNodes)",
+            "- auditIssues: \(report.counts.auditIssues)",
+            "- scrollViews: \(report.counts.scrollViews)",
+            "- scrollableScrollViews: \(report.counts.scrollableScrollViews)",
+        ]
+
+        if !report.scrollViews.isEmpty {
+            lines += [
+                "",
+                "## Scrollability",
+                "",
+            ]
+            for scrollView in report.scrollViews.prefix(8) {
+                let frame = scrollView.frame.map { " frame=\(rectSummary($0))" } ?? ""
+                let axes = scrollView.scrollableAxes.isEmpty ? "none" : scrollView.scrollableAxes.joined(separator: ",")
+                lines.append("- \(scrollView.ref)\(scrollView.testID.map { " #\($0)" } ?? "")\(frame) contentSize=\(format(scrollView.contentSize.width))x\(format(scrollView.contentSize.height)) offset=\(format(scrollView.contentOffset.x)),\(format(scrollView.contentOffset.y)) axes=\(axes)")
+            }
+        }
+
+        if !report.topAuditIssues.isEmpty {
+            lines += [
+                "",
+                "## Audit Issues By Kind",
+                "",
+            ]
+            for key in report.auditIssuesByKind.keys.sorted() {
+                lines.append("- \(key): \(report.auditIssuesByKind[key] ?? 0)")
+            }
+
+            lines += [
+                "",
+                "## Top Audit Issues",
+                "",
+            ]
+            for issue in report.topAuditIssues {
+                let text = issue.text.map { " text=\"\($0)\"" } ?? ""
+                let type = issue.className ?? issue.typeName ?? "unknown"
+                let frame = issue.frame.map { " frame=\(rectSummary($0))" } ?? ""
+                lines.append("- \(issue.kind.rawValue) \(issue.ref) \(type)\(issue.testID.map { " #\($0)" } ?? "")\(text)\(frame): \(issue.message)")
+            }
+        }
+
+        lines += [
+            "",
+            "## Agent Loop",
+            "",
+            "Use the screenshot for visual fidelity and the screen-map/audit/accessibility artifacts for structure, semantics, and actionable fixes.",
+        ]
+        return lines.joined(separator: "\n") + "\n"
     }
 
     private static func selectorDescription(_ selector: LoupeSelector) -> String {

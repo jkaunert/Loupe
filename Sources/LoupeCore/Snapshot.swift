@@ -154,6 +154,21 @@ public struct LoupeUIScrollViewProperties: Codable, Equatable {
     public var showsVerticalScrollIndicator: Bool
     public var showsHorizontalScrollIndicator: Bool
 
+    private enum CodingKeys: String, CodingKey {
+        case contentOffset
+        case contentSize
+        case contentInset
+        case adjustedContentInset
+        case scrollIndicatorInsets
+        case isScrollEnabled
+        case isPagingEnabled
+        case bounces
+        case alwaysBounceVertical
+        case alwaysBounceHorizontal
+        case showsVerticalScrollIndicator
+        case showsHorizontalScrollIndicator
+    }
+
     public init(
         contentOffset: LoupePoint,
         contentSize: LoupeSize,
@@ -180,6 +195,25 @@ public struct LoupeUIScrollViewProperties: Codable, Equatable {
         self.alwaysBounceHorizontal = alwaysBounceHorizontal
         self.showsVerticalScrollIndicator = showsVerticalScrollIndicator
         self.showsHorizontalScrollIndicator = showsHorizontalScrollIndicator
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        contentOffset = try container.decode(LoupePoint.self, forKey: .contentOffset)
+        contentSize = try container.decode(LoupeSize.self, forKey: .contentSize)
+        contentInset = try container.decodeIfPresent(LoupeInsets.self, forKey: .contentInset)
+            ?? LoupeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        adjustedContentInset = try container.decodeIfPresent(LoupeInsets.self, forKey: .adjustedContentInset)
+            ?? LoupeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        scrollIndicatorInsets = try container.decodeIfPresent(LoupeInsets.self, forKey: .scrollIndicatorInsets)
+            ?? LoupeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        isScrollEnabled = try container.decode(Bool.self, forKey: .isScrollEnabled)
+        isPagingEnabled = try container.decodeIfPresent(Bool.self, forKey: .isPagingEnabled) ?? false
+        bounces = try container.decodeIfPresent(Bool.self, forKey: .bounces) ?? true
+        alwaysBounceVertical = try container.decodeIfPresent(Bool.self, forKey: .alwaysBounceVertical) ?? false
+        alwaysBounceHorizontal = try container.decodeIfPresent(Bool.self, forKey: .alwaysBounceHorizontal) ?? false
+        showsVerticalScrollIndicator = try container.decodeIfPresent(Bool.self, forKey: .showsVerticalScrollIndicator) ?? true
+        showsHorizontalScrollIndicator = try container.decodeIfPresent(Bool.self, forKey: .showsHorizontalScrollIndicator) ?? true
     }
 }
 

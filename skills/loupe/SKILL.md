@@ -42,6 +42,7 @@ After launch, fetch context from the in-app Loupe server:
 
 ```bash
 loupe current
+loupe capture-report --bundle-id com.example.App --output /tmp/loupe-report
 loupe tree --bundle-id com.example.App --accessibility --depth 3
 loupe fetch <runtime-host>/observation
 loupe fetch <runtime-host>/snapshot --output /tmp/loupe-snapshot.json
@@ -49,16 +50,25 @@ loupe query /tmp/loupe-snapshot.json --test-id checkout.payButton
 loupe accessibility /tmp/loupe-snapshot.json
 loupe query /tmp/loupe-snapshot.json --tree accessibility --test-id checkout.payButton
 loupe inspect /tmp/loupe-snapshot.json --test-id checkout.payButton
+loupe screen-map /tmp/loupe-snapshot.json --limit 80
+loupe paint-stack /tmp/loupe-snapshot.json --point 201,319
 loupe subtree /tmp/loupe-snapshot.json --test-id checkout.form --depth 3
 loupe audit /tmp/loupe-snapshot.json
 loupe wait-for-visible --test-id checkout.payButton --timeout 5 --output /tmp/loupe-visible.json
 ```
 
-Use compact observation for LLM context. It carries UIKit type/class identity for
-interactive elements but avoids full property dumps. Keep full snapshots in
-files, query the view tree by `testID`, text, role, or ref for UI verification,
-and use `inspect` only when the full node, style, UIKit-specific fields, or
-parent/sibling/child context is needed.
+Use `capture-report` for design iteration when screenshots matter. It stores a
+screenshot beside snapshot, screen-map, accessibility, compact, audit, runtime,
+and summary artifacts, so visual review and DOM-like runtime checks stay paired.
+Use compact observation for quick LLM context. Use `screen-map` when a design
+or screenshot needs structural verification: it keeps visible semantic and
+styled elements with text, role, frame, style, UIKit class, and parent refs.
+Use `paint-stack` when a visual change appears hidden or ineffective; it shows
+the visible nodes at a point in top-to-bottom paint order, which helps choose
+the real paint target instead of a covered container.
+Keep full snapshots in files, query the view tree by `testID`, text, role, or
+ref for UI verification, and use `inspect` only when the full node, UIKit-
+specific fields, or parent/sibling/child context is needed.
 
 Use the accessibility tree for movement and input. Selector-based actions
 already resolve there first, then fall back to the view tree only if no
@@ -77,7 +87,10 @@ loupe tree --udid booted --view --depth 3
 loupe tree --bundle-id com.example.App --interesting
 loupe tree --bundle-id com.example.App --text --accessibility
 loupe current
+loupe capture-report --bundle-id com.example.App --output /tmp/loupe-report
 loupe fetch <runtime-host>/snapshot --output /tmp/loupe-snapshot.json
+loupe screen-map /tmp/loupe-snapshot.json --limit 80
+loupe paint-stack /tmp/loupe-snapshot.json --ref n21
 loupe inspect /tmp/loupe-snapshot.json --test-id target.id
 loupe mutations --ref n21
 loupe tap --test-id target.id --udid booted --trace-dir /tmp/loupe-trace --expect-visible next.id
