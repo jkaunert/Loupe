@@ -25,6 +25,40 @@ Actions required check. It runs:
 If local simulator state blocks E2E, record the failing script, exit status,
 and the generated `/tmp/loupe-*` logs or screenshots before handing work back.
 
+## Design-to-Code Evaluation
+
+When evaluating whether Loupe improves implementation quality, use a blind
+baseline instead of reusing the current agent's context.
+
+Required setup:
+
+- Start two fresh subagents without inherited conversation context.
+- Give both agents the same design link, target screen, and app requirements.
+- Give the Loupe agent only the Loupe CLI/skill as the extra capability.
+- Give the baseline agent no Loupe CLI, snapshots, traces, view tree, or skill.
+- Use separate work directories and simulator devices.
+- Forbid both agents from reading previous `/tmp/loupe-*` comparison artifacts.
+
+Score both outputs with the same artifacts:
+
+- visual distance to the design reference
+- view-tree structure for native text, image views, tab bars, scroll views, and
+  layout/style metadata
+- action traces for critical routes and scroll gestures
+- runtime correctness, including whether fixed chrome is outside content scrolls
+- runtime screen size and device-class correctness before visual scoring
+- speed, command count, and amount of context needed
+
+The Loupe path should improve the final result, not just produce more logs.
+Treat the benchmark as failed when the Loupe output has worse visual distance
+than the no-Loupe baseline and the extra view-tree evidence did not lead to a
+concrete structural or interaction advantage. In that case, update the skill or
+CLI feedback loop before claiming Loupe improves design implementation quality.
+
+This benchmark is useful only when the Loupe result is produced from fresh
+runtime evidence. A result produced from remembered fixes or prior screenshots
+does not count as evidence that the CLI or skill improved agent performance.
+
 ## Implemented
 
 - Core unit tests use Swift Testing (`@Test`, `#expect`, `#require`).

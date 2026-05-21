@@ -201,7 +201,7 @@ assert_query example.bottomSheet.scrollView /tmp/loupe-native-bottomsheet-scroll
 COLLAPSED_Y="$(inspect_value example.bottomSheet.scrollView node.frame.y)"
 COLLAPSED_HEIGHT="$(inspect_value example.bottomSheet.scrollView node.frame.height)"
 GRABBER_REF="$(query_ref example.bottomSheet.grabber)"
-.build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --ref "$GRABBER_REF" --expect-visible example.bottomSheet.expandedMarker
+.build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --snapshot "$SNAPSHOT_PATH" --ref "$GRABBER_REF" --expect-visible example.bottomSheet.expandedMarker
 fetch_snapshot
 EXPANDED_Y="$(inspect_value example.bottomSheet.scrollView node.frame.y)"
 EXPANDED_HEIGHT="$(inspect_value example.bottomSheet.scrollView node.frame.height)"
@@ -236,7 +236,7 @@ grep -q '"resolvedTarget"' "$TRACE_DIR/action-target.json"
 grep -q '"root"' "$SUBTREE_PATH"
 grep -q '"example.components.switch"' "$SUBTREE_PATH"
 BACK_REF="$(query_ref example.components.back)"
-.build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --ref "$BACK_REF"
+.build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --snapshot "$SNAPSHOT_PATH" --ref "$BACK_REF"
 .build/debug/loupe wait-for-visible --host "$HOST" --test-id example.customerList --timeout 5 >/tmp/loupe-native-wait-list-after-ref-tap.json
 
 echo "case: routed UIKit component screen"

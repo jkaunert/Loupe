@@ -154,6 +154,12 @@ They use Loupe's native host-side HID backend. If dispatch fails, use
 skill. `loupe pinch` is intentionally not listed above because pinch dispatch is
 not implemented yet.
 
+`loupe swipe` verifies scroll offset changes when the start point is inside a
+scrollable UIKit view with remaining room in the gesture direction. If the HID
+event succeeds but the offset does not move, treat the action as failed and
+retry with a point inside visible content. Use `--no-verify-scroll` only for
+non-scroll swipe gestures.
+
 Failed actions automatically create a trace under `/tmp/loupe-traces`. Trace
 bundles include before/after snapshots, accessibility trees, logs, screenshots,
 an action record, and `target-crop.png` when a target frame was available.
@@ -188,6 +194,86 @@ loupe compare-design snapshot.json figma-export.json
 Match design nodes to Loupe nodes by `testID` first, then role plus text, then
 geometry. Use Loupe view tree data for layout/style comparison and accessibility
 tree data only for movement/input selectors.
+
+## Design Implementation Quality Gate
+
+When implementing from Figma, screenshots, or visual references, treat the
+Loupe view tree as the primary structured source of truth for runtime UI
+quality. Screenshots are still required, but they are the visual sanity check;
+they should not replace view-tree inspection. Do not report completion after
+only collecting `snapshot`, `tree`, `inspect`, `audit`, screenshots, or action
+traces; use them to reject bad implementations and iterate.
+
+Required loop:
+
+```bash
+loupe fetch <runtime-host>/snapshot --output /tmp/loupe-snapshot.json
+loupe tree /tmp/loupe-snapshot.json --view --depth 6
+loupe inspect /tmp/loupe-snapshot.json --test-id key.control
+loupe audit /tmp/loupe-snapshot.json
+loupe text-map /tmp/loupe-snapshot.json --accessibility
+loupe tree /tmp/loupe-snapshot.json --accessibility --depth 6
+loupe screenshot --udid booted --output /tmp/loupe-screen.png
+loupe tap --test-id key.control --udid booted --trace-dir /tmp/loupe-trace
+loupe trace-summary /tmp/loupe-trace
+```
+
+Use the view tree first to verify structure, layout ownership, scroll
+containers, frames, colors, corner radius, text-bearing nodes, and UIKit
+metadata. Use the accessibility tree for movement and input selectors. Use
+screenshots to catch visual composition issues the tree cannot prove, such as
+wrong imagery, crop quality, shadows, and overall polish.
+
+For design-to-code work, turn the view tree into an anchor table before
+declaring success. Pick the main screen anchors from the design, then compare
+their runtime frames from `tree` or `inspect`: root/screen, primary title,
+first major image/card, fixed chrome such as tab bars, and at least one
+scrollable container. Fix the largest frame or hierarchy miss before polishing
+smaller visual differences.
+
+Verify the runtime screen size before judging visual quality. If
+`snapshot.screen.size` is unexpectedly small or does not match the intended
+device class, fix app packaging or launch setup first. A common cause is an iOS
+app without a launch screen running in legacy compatibility dimensions; any
+pixel comparison or anchor table from that state is invalid.
+
+If a design screenshot or Figma render is available, keep it beside the Loupe
+screenshot and compare them after every substantial change. A Loupe-aided
+implementation is not successful just because it has more artifacts; it should
+be at least as close to the reference as a reasonable no-Loupe baseline while
+also proving runtime structure and actions through the view tree and traces.
+
+Reject the result and fix the implementation when any of these are true:
+
+- The implementation mixes real simulator chrome/safe-area behavior with design
+  chrome in a way that shifts the whole screen. If the design includes a status
+  bar or device chrome as part of the target, either hide the real status bar
+  and implement that chrome intentionally, or remove the duplicated design
+  chrome. Verify the root and title frames against the design anchors.
+- `snapshot.screen.size` indicates compatibility-mode or wrong-device rendering,
+  such as a tiny legacy canvas instead of the intended iPhone screen size.
+- A fixed element such as a tab bar, navigation bar, bottom sheet chrome, or
+  persistent action bar is inside a content scroll view.
+- A horizontal carousel is implemented as a vertical or mixed-axis scroll view.
+- A screen that should scroll only proves a `UIScrollView` exists, but no
+  action trace shows a meaningful `contentOffset` or visible-frame change.
+- A partially visible carousel item uses a pre-cropped media asset. Use a
+  full-size leaf asset and let the scroll view or clipping container crop it.
+- A design source provides image-fill assets, but the implementation uses
+  screenshot crops, placeholders, or generated substitutes for those leaf media.
+- Text or badges that are layered over an image in the design are baked into the
+  bitmap or omitted instead of being implemented as separate UI layers.
+- A visible image, card, sheet, or button is clipped unexpectedly.
+- A key route cannot be exercised by a Loupe action trace.
+- A key visible element has the wrong text, role, frame, `cornerRadius`, color,
+  or scroll metadata in `inspect` or the view tree.
+- The simulator screenshot is SpringBoard, a system permission prompt, an
+  `Open in ...?` confirmation, or any screen other than the intended app state.
+
+For visual-heavy screens, do not use a full-screen screenshot as the app UI.
+Use native UI for structure, text, controls, scrolling, and routing. Use bitmap
+assets only for leaf media such as book covers, photos, avatars, maps, album art,
+or product images.
 
 ## Cleanup
 

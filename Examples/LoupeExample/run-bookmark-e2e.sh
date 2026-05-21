@@ -225,7 +225,7 @@ grep -q '"isOn" : true' "$INSPECT_PATH"
 grep -q '"className" : "UISegmentedControl"' "$INSPECT_PATH"
 grep -q '"selectedSegmentIndex" : 0' "$INSPECT_PATH"
 BACK_REF="$(query_ref bookmark.detail.back)"
-.build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --ref "$BACK_REF"
+.build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --snapshot "$SNAPSHOT_PATH" --ref "$BACK_REF"
 .build/debug/loupe wait-for-visible --host "$HOST" --test-id bookmark.list --timeout 5 >/tmp/loupe-bookmark-wait-list.json
 .build/debug/loupe wait-for-gone --host "$HOST" --test-id bookmark.detail --timeout 5 >/tmp/loupe-bookmark-wait-detail-gone.json
 .build/debug/loupe wait-for-visible --host "$HOST" --test-id bookmark.add --timeout 5 >/tmp/loupe-bookmark-wait-add.json
@@ -257,7 +257,7 @@ fetch_snapshot
 .build/debug/loupe inspect "$SNAPSHOT_PATH" --test-id bookmark.detail.favorite > "$INSPECT_PATH"
 grep -q '"isOn" : true' "$INSPECT_PATH"
 BACK_REF="$(query_ref bookmark.detail.back)"
-.build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --ref "$BACK_REF"
+.build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --snapshot "$SNAPSHOT_PATH" --ref "$BACK_REF"
 .build/debug/loupe wait-for-visible --host "$HOST" --test-id bookmark.favorites --timeout 5 >/tmp/loupe-bookmark-wait-favorites-return.json
 
 echo "case: bookmark search tab"

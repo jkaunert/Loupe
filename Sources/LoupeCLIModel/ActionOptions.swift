@@ -9,6 +9,7 @@ package struct ActionOptions: ActionDispatchOptions {
     package var udid: String
     package var timeout: TimeInterval
     package var selector: LoupeSelector?
+    package var snapshotURL: URL?
     package var point: LoupePoint?
     package var endPoint: LoupePoint?
     package var screen: LoupeSize
@@ -18,6 +19,7 @@ package struct ActionOptions: ActionDispatchOptions {
     package var endSpread: Double?
     package var traceDirectory: URL?
     package var expectVisibleTestID: String?
+    package var verifyScroll: Bool
 
     package init(command: String, arguments: [String]) throws {
         self.command = command
@@ -29,6 +31,7 @@ package struct ActionOptions: ActionDispatchOptions {
         screen = LoupeSize(width: 0, height: 0)
 
         var selector: LoupeSelector?
+        var snapshotURL: URL?
         var point: LoupePoint?
         var endPoint: LoupePoint?
         var duration: Double?
@@ -37,6 +40,7 @@ package struct ActionOptions: ActionDispatchOptions {
         var endSpread: Double?
         var traceDirectory: URL?
         var expectVisibleTestID: String?
+        var verifyScroll = true
         var screenWidth: Double?
         var screenHeight: Double?
         var hasX = false
@@ -62,6 +66,8 @@ package struct ActionOptions: ActionDispatchOptions {
                 selector = .testID(try Self.value(after: argument, in: arguments, index: &index))
             case "--ref":
                 selector = .ref(try Self.value(after: argument, in: arguments, index: &index))
+            case "--snapshot":
+                snapshotURL = URL(fileURLWithPath: try Self.value(after: argument, in: arguments, index: &index))
             case "--text":
                 let value = try Self.value(after: argument, in: arguments, index: &index)
                 if command == "type" {
@@ -107,6 +113,8 @@ package struct ActionOptions: ActionDispatchOptions {
                 traceDirectory = URL(fileURLWithPath: try Self.value(after: argument, in: arguments, index: &index))
             case "--expect-visible":
                 expectVisibleTestID = try Self.value(after: argument, in: arguments, index: &index)
+            case "--no-verify-scroll":
+                verifyScroll = false
             default:
                 throw CLIError("Unknown \(command) option: \(argument)")
             }
@@ -138,6 +146,7 @@ package struct ActionOptions: ActionDispatchOptions {
         }
 
         self.selector = selector
+        self.snapshotURL = snapshotURL
         self.point = point
         self.endPoint = endPoint
         self.duration = duration
@@ -146,6 +155,7 @@ package struct ActionOptions: ActionDispatchOptions {
         self.endSpread = endSpread
         self.traceDirectory = traceDirectory
         self.expectVisibleTestID = expectVisibleTestID
+        self.verifyScroll = verifyScroll
     }
 
     private static func value(after option: String, in arguments: [String], index: inout Int) throws -> String {

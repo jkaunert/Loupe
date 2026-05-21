@@ -135,7 +135,7 @@ ruby -e '
 ' "$COLLAPSED_Y" "$AFTER_DRAG_Y" "$COLLAPSED_HEIGHT" "$AFTER_DRAG_HEIGHT"
 
 GRABBER_REF="$(query_ref example.bottomSheet.grabber)"
-.build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --ref "$GRABBER_REF" --expect-visible example.bottomSheet.expandedMarker
+.build/debug/loupe tap --host "$HOST" --udid "$DEVICE" --snapshot "$SNAPSHOT_PATH" --ref "$GRABBER_REF" --expect-visible example.bottomSheet.expandedMarker
 fetch_snapshot
 EXPANDED_Y="$(inspect_value example.bottomSheet.scrollView node.frame.y)"
 EXPANDED_HEIGHT="$(inspect_value example.bottomSheet.scrollView node.frame.height)"

@@ -47,6 +47,8 @@ struct LoupeCLI {
             try diff(arguments)
         case "doctor":
             try doctor(arguments)
+        case "explore-routes":
+            try await exploreRoutes(arguments)
         case "fetch":
             try await fetch(arguments)
         case "install-skills":
@@ -888,6 +890,9 @@ struct LoupeCLI {
               doctor
                   Check local Loupe installation and injector discovery.
 
+              explore-routes [--host <url>] [--udid <sim>] [--bundle-id <id>] [--limit <n>] [--output <path>]
+                  Tap visible route-like cells/buttons one by one, snapshot each destination, and navigate back.
+
               fetch <url> [--output <path>] [--timeout <seconds>]
                   Fetch a probe endpoint such as <runtime-host>/observation.
 
@@ -960,11 +965,11 @@ struct LoupeCLI {
               launch --bundle-id <id> [--device booted|--udid <sim>] [--inject] [--dylib <path>] [--env KEY=VALUE]
                   Launch an iOS Simulator app through simctl. --inject auto-resolves LoupeInjector.
 
-              tap (--test-id <id> | --ref <ref> | --x <n> --y <n>) --udid <sim> [--expect-visible <testID>]
+              tap (--test-id <id> | --ref <ref> | --x <n> --y <n>) --udid <sim> [--snapshot <snapshot.json>] [--expect-visible <testID>]
                   Resolve a Loupe target or coordinate and tap it through the native HID backend.
 
               swipe|drag --from x,y --to x,y --udid <sim>
-                  Dispatch a one-finger gesture through the native HID backend. Add --trace-dir <path> to save before/after artifacts.
+                  Dispatch a one-finger gesture through the native HID backend. Swipe verifies scroll offset changes when possible; pass --no-verify-scroll to opt out.
 
               pinch --center x,y --start-spread <n> --end-spread <n> --udid <sim>
                   Parse a two-finger pinch request. Pinch HID dispatch is not implemented yet.
@@ -1021,8 +1026,12 @@ struct LoupeCLI {
             return "Usage: loupe capture-report [--host <url>] [--udid <sim>] [--bundle-id <id>] --output <dir> [--screen-map-limit <n>] [--timeout <seconds>]"
         case "diff":
             return "Usage: loupe diff <before-snapshot.json> <after-snapshot.json> [--json] [--changed-only] [--limit <n>]"
+        case "explore-routes":
+            return "Usage: loupe explore-routes [--host <url>] [--udid <sim>] [--bundle-id <id>] [--limit <n>] [--settle <seconds>] [--back-point x,y] [--trace-dir <dir>] [--output <path>] [--json]"
         case "trace-summary":
             return "Usage: loupe trace-summary <trace-dir> [--json] [--limit <n>]"
+        case "swipe":
+            return "Usage: loupe swipe --from x,y --to x,y --udid <sim> [--host <url>] [--duration <seconds>] [--no-verify-scroll] [--trace-dir <path>]"
         case "wait-for-visible":
             return "Usage: loupe wait-for-visible (--test-id <id> | --ref <ref> | --text <text> | --role <role>) [--host <url>] [--udid <sim>] [--bundle-id <id>] [--output <path>] [--timeout <seconds>]"
         case "wait-for-gone":
@@ -1402,6 +1411,289 @@ struct LoupeCLI {
         try run(process, label: "simctl screenshot", timeout: options.timeout)
     }
 
+    private static func exploreRoutes(_ arguments: [String]) async throws {
+        let options = try ExploreRoutesOptions(arguments)
+        let host = try await resolvedRuntimeHost(
+            requestedHost: options.host,
+            hostWasExplicit: options.hostWasExplicit,
+            udid: options.udid,
+            bundleID: options.bundleID
+        )
+        if let udid = options.udid {
+            try await validateRuntimeIdentity(host: host, expectedUDID: udid, timeout: options.timeout)
+        }
+
+        let runtimeState = try await fetchRuntimeState(host: host, timeout: options.timeout)
+        let actionUDID = options.udid ?? runtimeState.identity.simulatorUDID ?? "booted"
+        var visitedKeys = Set<String>()
+        var visits: [ExploreRouteVisit] = []
+        var skippedCandidates = 0
+        var latestSnapshot = try await fetchSnapshot(host: host, timeout: options.timeout)
+
+        while visits.count < options.limit {
+            let candidates = ExploreRoutePlanner.candidates(
+                in: latestSnapshot,
+                visitedKeys: visitedKeys,
+                limit: max(options.limit - visits.count, 1) + 4
+            )
+            guard let candidate = candidates.first else {
+                break
+            }
+            skippedCandidates += max(0, candidates.count - 1)
+            visitedKeys.insert(candidate.key)
+            let beforeSnapshot = latestSnapshot
+
+            let routeTraceDirectory = options.traceDirectory?.appendingPathComponent(
+                String(format: "%02d-%@", visits.count + 1, candidate.ref),
+                isDirectory: true
+            )
+            var afterSnapshot: LoupeSnapshot?
+            var tapElapsed = 0.0
+            var afterSnapshotElapsed = 0.0
+            var backElapsed = 0.0
+            var backSucceeded = false
+            var errorMessage: String?
+
+            do {
+                tapElapsed = try await measure {
+                    try await performRouteTap(
+                        candidate,
+                        snapshot: beforeSnapshot,
+                        host: host,
+                        udid: actionUDID,
+                        timeout: options.timeout,
+                        traceDirectory: routeTraceDirectory
+                    )
+                }
+                try await sleep(seconds: options.settleDelay)
+                (afterSnapshot, afterSnapshotElapsed) = try await measuredValue {
+                    try await fetchSnapshot(host: host, timeout: options.timeout)
+                }
+                if let afterSnapshot {
+                    backElapsed = try await measure {
+                        try performRouteBack(
+                            snapshot: afterSnapshot,
+                            udid: actionUDID,
+                            timeout: options.timeout,
+                            backTestID: options.backTestID,
+                            fallbackPoint: options.backPoint
+                        )
+                    }
+                    backSucceeded = true
+                    try await sleep(seconds: options.settleDelay)
+                    latestSnapshot = try await fetchSnapshot(host: host, timeout: options.timeout)
+                }
+            } catch {
+                errorMessage = String(describing: error)
+            }
+
+            visits.append(
+                ExploreRouteVisit(
+                    index: visits.count + 1,
+                    candidate: candidate,
+                    beforeSnapshotID: beforeSnapshot.id,
+                    afterSnapshotID: afterSnapshot?.id,
+                    beforeTitle: probableTitle(in: beforeSnapshot),
+                    afterTitle: afterSnapshot.flatMap(probableTitle),
+                    tapElapsed: tapElapsed,
+                    afterSnapshotElapsed: afterSnapshotElapsed,
+                    backElapsed: backElapsed,
+                    backSucceeded: backSucceeded,
+                    traceDirectory: routeTraceDirectory?.path,
+                    error: errorMessage
+                )
+            )
+
+            if errorMessage != nil || !backSucceeded {
+                break
+            }
+        }
+
+        let report = ExploreRoutesReport(
+            bundleID: runtimeState.identity.bundleIdentifier ?? options.bundleID,
+            host: host.absoluteString,
+            udid: actionUDID,
+            screen: latestSnapshot.screen,
+            visited: visits,
+            skippedCandidates: skippedCandidates,
+            generatedAt: Date()
+        )
+
+        let data = try makeLoupeJSONEncoder().encode(report)
+        if options.json || options.outputURL != nil {
+            try write(data: data, outputURL: options.outputURL)
+        } else {
+            print(renderExploreRoutesReport(report))
+        }
+    }
+
+    private static func performRouteTap(
+        _ candidate: ExploreRouteCandidate,
+        snapshot: LoupeSnapshot,
+        host: URL,
+        udid: String,
+        timeout: TimeInterval,
+        traceDirectory: URL?
+    ) async throws {
+        if let traceDirectory {
+            try FileManager.default.createDirectory(at: traceDirectory, withIntermediateDirectories: true)
+            try await action(command: "tap", arguments: [
+                "--host", host.absoluteString,
+                "--udid", udid,
+                "--ref", candidate.ref,
+                "--trace-dir", traceDirectory.path,
+                "--timeout", String(timeout),
+            ])
+            return
+        }
+
+        let options = try ActionOptions(command: "tap", arguments: [
+            "--udid", udid,
+            "--x", String(candidate.center.x),
+            "--y", String(candidate.center.y),
+            "--width", String(snapshot.screen.size.width),
+            "--height", String(snapshot.screen.size.height),
+            "--timeout", String(timeout),
+        ])
+        let target = ActionTarget(
+            point: candidate.center,
+            screen: snapshot.screen.size,
+            screenScale: snapshot.screen.scale,
+            source: .view(ref: candidate.ref)
+        )
+        try dispatchAction(command: "tap", options: options, target: target)
+    }
+
+    private static func performRouteBack(
+        snapshot: LoupeSnapshot,
+        udid: String,
+        timeout: TimeInterval,
+        backTestID: String?,
+        fallbackPoint: LoupePoint
+    ) throws {
+        let point = backTestID.flatMap { backPoint(in: snapshot, testID: $0) } ?? fallbackPoint
+        let options = try ActionOptions(command: "tap", arguments: [
+            "--udid", udid,
+            "--x", String(point.x),
+            "--y", String(point.y),
+            "--width", String(snapshot.screen.size.width),
+            "--height", String(snapshot.screen.size.height),
+            "--timeout", String(timeout),
+        ])
+        let target = ActionTarget(
+            point: point,
+            screen: snapshot.screen.size,
+            screenScale: snapshot.screen.scale,
+            source: .coordinates
+        )
+        try dispatchAction(command: "tap", options: options, target: target)
+    }
+
+    private static func backPoint(in snapshot: LoupeSnapshot, testID: String) -> LoupePoint? {
+        snapshot.nodes.values
+            .filter { $0.isVisible && $0.isEnabled && $0.testID == testID }
+            .sorted { lhs, rhs in
+                guard let lhsFrame = lhs.frame else { return false }
+                guard let rhsFrame = rhs.frame else { return true }
+                if abs(lhsFrame.y - rhsFrame.y) > 1 {
+                    return lhsFrame.y < rhsFrame.y
+                }
+                return lhsFrame.x < rhsFrame.x
+            }
+            .compactMap { center(of: $0.frame) }
+            .first
+    }
+
+    private static func probableTitle(in snapshot: LoupeSnapshot) -> String? {
+        let screen = snapshot.screen.size
+        let textNodes = snapshot.nodes.values.compactMap { node -> (String, LoupeRect)? in
+            guard node.isVisible, let frame = node.frame, let text = displayText(node), !text.isEmpty else {
+                return nil
+            }
+            return (text, frame)
+        }
+
+        let topTextNodes = textNodes.filter { _, frame in
+            frame.y >= 40
+                && frame.y <= 150
+                && frame.x >= 0
+                && frame.maxX <= screen.width
+                && frame.width <= screen.width * 0.85
+        }
+        let sortedTopTextNodes = topTextNodes.sorted { lhs, rhs in
+            if abs(lhs.1.y - rhs.1.y) > 1 {
+                return lhs.1.y < rhs.1.y
+            }
+            return abs((lhs.1.x + lhs.1.width / 2) - screen.width / 2)
+                < abs((rhs.1.x + rhs.1.width / 2) - screen.width / 2)
+        }
+        if let title = sortedTopTextNodes.first?.0 {
+            return title
+        }
+
+        return textNodes
+            .sorted { lhs, rhs in
+                if abs(lhs.1.y - rhs.1.y) > 1 {
+                    return lhs.1.y < rhs.1.y
+                }
+                return lhs.1.x < rhs.1.x
+            }
+            .first?.0
+    }
+
+    private static func measuredValue<T>(_ operation: () async throws -> T) async throws -> (T, Double) {
+        let start = Date()
+        let value = try await operation()
+        return (value, Date().timeIntervalSince(start))
+    }
+
+    private static func measure(_ operation: () async throws -> Void) async throws -> Double {
+        let start = Date()
+        try await operation()
+        return Date().timeIntervalSince(start)
+    }
+
+    private static func sleep(seconds: TimeInterval) async throws {
+        guard seconds > 0 else { return }
+        try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+    }
+
+    private static func renderExploreRoutesReport(_ report: ExploreRoutesReport) -> String {
+        var lines = [
+            "explore-routes host=\(report.host) udid=\(report.udid) screen=\(format(report.screen.size.width))x\(format(report.screen.size.height))",
+        ]
+        if let bundleID = report.bundleID {
+            lines[0] += " bundle=\(bundleID)"
+        }
+        for visit in report.visited {
+            var parts = [
+                "\(visit.index).",
+                visit.candidate.ref,
+                visit.candidate.reason,
+                "frame=\(format(visit.candidate.frame))",
+                "tap=\(format(visit.tapElapsed))s",
+                "snapshot=\(format(visit.afterSnapshotElapsed))s",
+                "back=\(format(visit.backElapsed))s",
+            ]
+            if let text = visit.candidate.text {
+                parts.append("text=\"\(text)\"")
+            }
+            if let title = visit.afterTitle {
+                parts.append("after=\"\(title)\"")
+            }
+            if let error = visit.error {
+                parts.append("error=\"\(error)\"")
+            } else if !visit.backSucceeded {
+                parts.append("back=failed")
+            }
+            lines.append(parts.joined(separator: " "))
+        }
+        if report.visited.isEmpty {
+            lines.append("No visible route-like candidates found.")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     private static func action(command: String, arguments: [String]) async throws {
         var options = try ActionOptions(command: command, arguments: arguments)
         var target: ActionTarget?
@@ -1431,6 +1723,11 @@ struct LoupeCLI {
             }
             let resolvedTarget = try await resolveActionTarget(options)
             target = resolvedTarget
+            let scrollBaseline = try await scrollVerificationBaseline(
+                command: command,
+                options: options,
+                target: resolvedTarget
+            )
             if let traceDirectory = options.traceDirectory {
                 try writeActionRecord(
                     command: command,
@@ -1442,6 +1739,9 @@ struct LoupeCLI {
             }
             try dispatchAction(command: command, options: options, target: resolvedTarget)
             try await verifyRuntimeAlive(host: options.host, timeout: options.timeout)
+            if let scrollBaseline {
+                try await verifyScrollChanged(scrollBaseline, host: options.host, timeout: options.timeout)
+            }
             if let expected = options.expectVisibleTestID {
                 try await expectVisible(expected, host: options.host, timeout: options.timeout)
             }
@@ -1463,6 +1763,30 @@ struct LoupeCLI {
                 FileHandle.standardError.write(Data("trace: \(traceDirectory.path)\n".utf8))
             }
             throw error
+        }
+    }
+
+    private static func scrollVerificationBaseline(
+        command: String,
+        options: ActionOptions,
+        target: ActionTarget
+    ) async throws -> GestureScrollBaseline? {
+        guard command == "swipe", options.verifyScroll, let endPoint = options.endPoint else {
+            return nil
+        }
+        let snapshot = try await fetchSnapshot(host: options.host, timeout: options.timeout)
+        return GestureScrollVerifier.baseline(in: snapshot, start: target.point, end: endPoint)
+    }
+
+    private static func verifyScrollChanged(
+        _ baseline: GestureScrollBaseline,
+        host: URL,
+        timeout: TimeInterval
+    ) async throws {
+        try await Task.sleep(nanoseconds: 250_000_000)
+        let after = try await fetchSnapshot(host: host, timeout: timeout)
+        guard GestureScrollVerifier.didChange(baseline, after: after) else {
+            throw CLIError(GestureScrollVerifier.diagnostic(baseline))
         }
     }
 
@@ -1624,12 +1948,22 @@ struct LoupeCLI {
             throw CLIError("\(options.command) requires a selector or coordinates")
         }
 
-        let snapshot = try await fetchSnapshot(host: options.host, timeout: options.timeout)
-        let accessibilityTree = try await fetchAccessibilityTree(
-            host: options.host,
-            fallbackSnapshot: snapshot,
-            timeout: options.timeout
-        )
+        let snapshot: LoupeSnapshot
+        if let snapshotURL = options.snapshotURL {
+            snapshot = try decodeSnapshot(from: snapshotURL)
+        } else {
+            snapshot = try await fetchSnapshot(host: options.host, timeout: options.timeout)
+        }
+        let accessibilityTree: LoupeAccessibilityTree
+        if options.snapshotURL != nil {
+            accessibilityTree = LoupeAccessibilityTree.build(from: snapshot)
+        } else {
+            accessibilityTree = try await fetchAccessibilityTree(
+                host: options.host,
+                fallbackSnapshot: snapshot,
+                timeout: options.timeout
+            )
+        }
         let accessibilityMatches = uniqueActionMatches(
             LoupeAccessibilityTreeQuery.find(
                 selector,

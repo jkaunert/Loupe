@@ -120,6 +120,8 @@ public enum LoupeLayoutAuditor {
                     let first = visibleChildren[index]
                     let second = visibleChildren[otherIndex]
                     guard let firstFrame = first.frame, let secondFrame = second.frame else { continue }
+                    guard shouldAuditSiblingOverlap(first, second) else { continue }
+
                     let overlapArea = firstFrame.intersectionArea(with: secondFrame)
                     if overlapArea >= options.minOverlapArea {
                         issues.append(
@@ -168,10 +170,36 @@ public enum LoupeLayoutAuditor {
     private static func shouldAuditDuplicateTestID(_ node: LoupeNode) -> Bool {
         if node.isInteractive { return true }
         if node.accessibility?.isElement == true { return true }
-        if node.role == "image" || node.typeName == "UIImageView" {
+        if isImageNode(node) {
             return false
         }
         return true
+    }
+
+    private static func shouldAuditSiblingOverlap(_ first: LoupeNode, _ second: LoupeNode) -> Bool {
+        guard !isDecorativeImageNode(first), !isDecorativeImageNode(second) else {
+            return false
+        }
+        return isOverlapAuditCandidate(first) && isOverlapAuditCandidate(second)
+    }
+
+    private static func isOverlapAuditCandidate(_ node: LoupeNode) -> Bool {
+        node.isInteractive
+            || node.testID != nil
+            || node.accessibility?.isElement == true
+            || LoupeObservationCompactor.displayText(for: node) != nil
+    }
+
+    private static func isDecorativeImageNode(_ node: LoupeNode) -> Bool {
+        isImageNode(node)
+            && !node.isInteractive
+            && node.accessibility?.isElement != true
+            && node.text == nil
+            && node.value == nil
+    }
+
+    private static func isImageNode(_ node: LoupeNode) -> Bool {
+        node.role == "image" || node.typeName == "UIImageView"
     }
 
     private static func interactiveIssues(

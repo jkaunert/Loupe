@@ -25,6 +25,36 @@ struct RuntimeActionModelsTests {
         #expect(options.traceDirectory?.path == "/tmp/loupe-scroll-trace")
     }
 
+    @Test func swipeCanDisableScrollVerification() throws {
+        let options = try ActionOptions(
+            command: "swipe",
+            arguments: [
+                "--from", "201,735",
+                "--to", "201,300",
+                "--no-verify-scroll",
+            ]
+        )
+
+        #expect(options.verifyScroll == false)
+    }
+
+    @Test func refTapCanResolveAgainstProvidedSnapshot() throws {
+        let options = try ActionOptions(
+            command: "tap",
+            arguments: [
+                "--host", "http://127.0.0.1:9736",
+                "--udid", "SIM-1",
+                "--snapshot", "/tmp/loupe-snapshot.json",
+                "--ref", "n21",
+            ]
+        )
+
+        #expect(options.host.absoluteString == "http://127.0.0.1:9736")
+        #expect(options.udid == "SIM-1")
+        #expect(options.snapshotURL?.path == "/tmp/loupe-snapshot.json")
+        #expect(options.selector == .ref("n21"))
+    }
+
     @Test func actionScreenResolverFallsBackToSnapshotScreenForCoordinateGestures() {
         let fallback = LoupeScreen(size: LoupeSize(width: 402, height: 874), scale: 3)
 

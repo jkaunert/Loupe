@@ -31,6 +31,10 @@ Use this file as a map, not as a full manual. Keep deeper project state in
 - Use the view tree for UI/layout/style validation. Use the accessibility tree
   first for movement and input; selector actions should only fall back to view
   frames when no accessibility match exists.
+- For design-to-code evaluation, keep Loupe evidence honest: compare against a
+  no-Loupe baseline with fresh subagents that do not inherit prior workspace
+  context or `/tmp` artifacts. The Loupe path should prove quality with view
+  tree inspection, screenshots, and action traces, not with remembered fixes.
 - The CLI currently exposes `tap`, `swipe`, `drag`, and `type`. Tap by text
   should stay out of the public interface; use `testID`, `ref`, or coordinates
   for tap.

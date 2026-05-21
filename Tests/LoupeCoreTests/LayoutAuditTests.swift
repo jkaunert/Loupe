@@ -100,6 +100,101 @@ struct LayoutAuditTests {
         #expect(!audit.issues.contains { $0.kind == .duplicateTestID && $0.testID == "chevron.right" })
     }
 
+    @Test func auditIgnoresDecorativeImageDuplicateAndOverlapNoise() {
+        let snapshot = LoupeSnapshot(
+            id: "layout-3",
+            capturedAt: Date(timeIntervalSince1970: 0),
+            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
+            rootRefs: ["root"],
+            nodes: [
+                "root": LoupeNode(
+                    ref: "root",
+                    parentRef: nil,
+                    kind: .view,
+                    typeName: "UIView",
+                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    children: ["card", "shadow-a", "shadow-b"]
+                ),
+                "card": LoupeNode(
+                    ref: "card",
+                    parentRef: "root",
+                    kind: .view,
+                    typeName: "UIView",
+                    testID: "book.card",
+                    frame: LoupeRect(x: 20, y: 80, width: 120, height: 180),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false
+                ),
+                "shadow-a": decorativeImage(
+                    ref: "shadow-a",
+                    testID: "/tmp/App.app/left-shadow.png",
+                    frame: LoupeRect(x: 24, y: 80, width: 24, height: 180)
+                ),
+                "shadow-b": decorativeImage(
+                    ref: "shadow-b",
+                    testID: "/tmp/App.app/left-shadow.png",
+                    frame: LoupeRect(x: 220, y: 80, width: 24, height: 180)
+                ),
+            ]
+        )
+
+        let audit = LoupeLayoutAuditor.audit(snapshot)
+
+        #expect(!audit.issues.contains { $0.kind == .duplicateTestID && $0.testID == "/tmp/App.app/left-shadow.png" })
+        #expect(!audit.issues.contains { $0.kind == .overlappingSiblings })
+    }
+
+    @Test func auditIgnoresUnidentifiedBackgroundLayerOverlap() {
+        let snapshot = LoupeSnapshot(
+            id: "layout-4",
+            capturedAt: Date(timeIntervalSince1970: 0),
+            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
+            rootRefs: ["root"],
+            nodes: [
+                "root": LoupeNode(
+                    ref: "root",
+                    parentRef: nil,
+                    kind: .view,
+                    typeName: "UIView",
+                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    children: ["background", "title"]
+                ),
+                "background": LoupeNode(
+                    ref: "background",
+                    parentRef: "root",
+                    kind: .view,
+                    typeName: "UIView",
+                    frame: LoupeRect(x: 20, y: 80, width: 200, height: 80),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false
+                ),
+                "title": LoupeNode(
+                    ref: "title",
+                    parentRef: "root",
+                    kind: .view,
+                    typeName: "UILabel",
+                    text: "Reading Now",
+                    frame: LoupeRect(x: 40, y: 100, width: 120, height: 24),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false
+                ),
+            ]
+        )
+
+        let audit = LoupeLayoutAuditor.audit(snapshot)
+
+        #expect(!audit.issues.contains { $0.kind == .overlappingSiblings })
+    }
+
     private func button(ref: String, testID: String?, frame: LoupeRect) -> LoupeNode {
         LoupeNode(
             ref: ref,
