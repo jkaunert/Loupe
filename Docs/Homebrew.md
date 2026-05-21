@@ -43,6 +43,6 @@ brew test heoblitz/loupe/loupe
 
 ## Current Status
 
-`v0.1.0` is public and the formula checksum is set. The formula has been
+`v0.1.2` is public and the formula checksum is set. The formula has been
 build-verified with a local archive; run the tap install command above after
 pushing formula changes to verify the public tap path end to end.
