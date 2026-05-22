@@ -19,7 +19,12 @@ struct LoupeCLI {
 
     private static func runMain() async throws {
         var arguments = Array(CommandLine.arguments.dropFirst())
-        let command = arguments.isEmpty ? "help" : arguments.removeFirst()
+        if arguments.isEmpty {
+            printSummaryHelp()
+            return
+        }
+
+        let command = arguments.removeFirst()
 
         if arguments.contains("--help") || arguments.contains("-h") {
             printCommandHelp(command)
@@ -101,6 +106,8 @@ struct LoupeCLI {
             try traceSummary(arguments)
         case "tap", "swipe", "drag", "pinch", "type":
             try await action(command: command, arguments: arguments)
+        case "version", "--version":
+            printVersion()
         case "wait-for-visible":
             try await waitFor(arguments, mode: .visible)
         case "wait-for-gone":
@@ -108,7 +115,11 @@ struct LoupeCLI {
         case "wait-for-value":
             try await waitFor(arguments, mode: .value)
         case "help", "--help", "-h":
-            printHelp()
+            if let command = arguments.first {
+                printCommandHelp(command)
+            } else {
+                printHelp()
+            }
         default:
             throw CLIError("Unknown command: \(command)")
         }
@@ -857,146 +868,94 @@ struct LoupeCLI {
         }
     }
 
+    static let developmentVersion = "0.1.4-dev"
+
+    static func versionString(
+        executablePath: String? = Bundle.main.executableURL?.path,
+        resolvedExecutablePath: String? = Bundle.main.executableURL?.resolvingSymlinksInPath().path
+    ) -> String {
+        for path in [executablePath, resolvedExecutablePath].compactMap(\.self) {
+            if let version = homebrewVersion(fromExecutablePath: path) {
+                return version
+            }
+        }
+        return developmentVersion
+    }
+
+    private static func homebrewVersion(fromExecutablePath executablePath: String) -> String? {
+        let components = executablePath.split(separator: "/").map(String.init)
+        for index in components.indices.dropLast(2) where components[index] == "Cellar" {
+            guard components[index + 1] == "loupe" else {
+                continue
+            }
+            return components[index + 2]
+        }
+        return nil
+    }
+
+    static func summaryHelp(version: String) -> String {
+        """
+        OVERVIEW: Runtime UI context for LLM agents working with iOS apps.
+
+        VERSION: \(version)
+
+        USAGE: loupe <subcommand>
+
+        OPTIONS:
+          -h, --help              Show help information.
+          --version               Show the current Loupe version.
+
+        RUNTIME SUBCOMMANDS:
+          start                   Launch and inject an iOS Simulator app.
+          runtimes                List known injected runtimes.
+          use                     Select the current runtime.
+          current                 Show the current runtime selection.
+
+        OBSERVE SUBCOMMANDS:
+          capture-report          Capture screenshot and runtime structure artifacts.
+          screen-map              Print visible semantic and styled elements.
+          tree                    Print view or accessibility trees.
+          inspect                 Inspect one matched node with local context.
+          query                   Query a snapshot by selector.
+
+        ACT SUBCOMMANDS:
+          tap                     Tap a selector, ref, or coordinate.
+          swipe, drag             Dispatch one-finger simulator gestures.
+          type                    Type text into the focused field.
+          explore-routes          Probe visible route-like controls.
+
+        MUTATE SUBCOMMANDS:
+          mutations               List supported runtime mutations.
+          set, set-many           Mutate supported UIKit properties.
+          constraints             Inspect captured Auto Layout constraints.
+          set-constraint          Mutate a captured constraint.
+
+        OTHER SUBCOMMANDS:
+          doctor                  Check local installation health.
+          injector-path           Print the resolved injector path.
+          skills                  Install the Loupe agent skill.
+          version                 Show the current Loupe version.
+
+          See 'loupe help <subcommand>' for detailed help.
+        """
+    }
+
+    static func summaryHelpLineCount(version: String) -> Int {
+        summaryHelp(version: version)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .count
+    }
+
+    private static func printSummaryHelp() {
+        print(summaryHelp(version: versionString()))
+    }
+
+    private static func printVersion() {
+        print("loupe \(versionString())")
+    }
+
     private static func printHelp() {
-        print(
-            """
-            loupe
-
-            Commands:
-              accessibility <snapshot.json> [--include-hidden]
-                  Print the accessibility tree derived from a full app snapshot.
-
-              compact <snapshot.json>
-                  Print the LLM-facing compact observation for a full app snapshot.
-
-              capture-report [--host <url>] [--udid <sim>] [--bundle-id <id>] --output <dir>
-                  Capture screenshot plus runtime structure artifacts for design iteration.
-
-              constraints [snapshot.json] (--ref <ref> | --test-id <id> | --text <text>) [--json]
-                  Print Auto Layout constraints captured for a matched view node.
-
-              set-constraint --id <constraint-id> constant <value> [priority <value>] [active true|false]
-                  Mutate a runtime Auto Layout constraint and report effective state.
-
-              deactivate-constraint --id <constraint-id>
-                  Deactivate a runtime Auto Layout constraint by id.
-
-              cleanup [--dry-run] [--traces-older-than 7d]
-                  Remove stale runtime records and old trace bundles.
-
-
-              compare-design <snapshot.json> <design.json> [--json]
-                  Compare a Loupe snapshot against an exported Figma-style design JSON.
-
-              diff <before-snapshot.json> <after-snapshot.json> [--json] [--changed-only] [--limit <n>]
-                  Compare snapshots. Use --changed-only to keep verification output compact.
-
-              doctor
-                  Check local Loupe installation and injector discovery.
-
-              explore-routes [--host <url>] [--udid <sim>] [--bundle-id <id>] [--limit <n>] [--output <path>]
-                  Tap visible route-like cells/buttons one by one, snapshot each destination, and navigate back.
-
-              fetch <url> [--output <path>] [--timeout <seconds>]
-                  Fetch a probe endpoint such as <runtime-host>/observation.
-
-              logs [--host <url>] [--udid <sim>] [--output <path>] [--timeout <seconds>]
-                  Fetch runtime logs emitted by the injected Loupe SDK.
-
-              runtimes|apps [--json]
-                  List known injected Loupe runtimes, hosts, bundles, and live status.
-
-              use <bundle-id> | use --host <url>
-                  Set the current Loupe runtime used when --host, --udid, and --bundle-id are omitted.
-
-              current [--json]
-                  Print the current Loupe runtime selection.
-
-              injector-path
-                  Print the LoupeInjector executable path used for simulator injection.
-
-              inspect <snapshot.json> (--test-id <id> | --ref <ref> | --text <text> | --role <role>) [--fields node,parent,children,siblings]
-                  Print one full node plus parent, sibling, and child summaries.
-
-              subtree <snapshot.json> (--test-id <id> | --ref <ref> | --text <text> | --role <role>) [--depth <n>]
-                  Print a bounded subtree rooted at a matched node.
-
-              tree [snapshot.json] [--host <url>] [--udid <sim>] [--bundle-id <id>] [--view|--accessibility] [--depth <n>]
-                  Print a human-readable view or accessibility tree prefix.
-
-              tree --interesting|--visible-leaves|--text|--mutable
-                  Print discovery-focused tree slices for deep or container-heavy screens.
-
-              text-map [snapshot.json] [--accessibility]
-                  Print visible text-bearing nodes.
-
-              trace-summary <trace-dir> [--json] [--limit <n>]
-                  Summarize an action trace bundle, including target, errors, logs, and snapshot diff.
-
-              audit <snapshot.json> [--tolerance <points>] [--min-overlap-area <points2>] [--kind <kind>] [--exclude-kind <kind>]
-                  Report layout, target-size, testID, and contrast issues.
-
-              query [snapshot.json] (--test-id <id> | --text <text> | --role <role> | --ref <ref>) [--bundle-id <id>] [--tree view|accessibility]
-                  Query a full snapshot view tree or derived accessibility tree.
-
-              set (--test-id <id> | --ref <ref>) <property> <value> [--udid <sim>] [--bundle-id <id>] [--output <path>]
-                  Mutate a supported UIKit view property through the injected runtime.
-
-              set --list | mutations [--host <url>] [--udid <sim>] [--bundle-id <id>]
-                  List runtime-supported UIKit mutation properties and aliases.
-
-              mutations (--ref <ref> | --text <text> | --test-id <id>)
-                  Print mutation properties that are useful for one matched node.
-
-              paint-stack [snapshot.json] (--point x,y | --ref <ref>) [--json]
-                  Print visible nodes at a screen point in top-to-bottom paint order.
-
-              set-many (--refs <refs> | --type-name <name> | --role <role>) <property> (--value <value> | --number <n> | --bool <bool> | --color <color> | --colors <colors>)
-                  Apply one property to multiple runtime nodes and write before/after/diff artifacts.
-
-              reflect <mutation-response.json> --source <dir> [--output <path>]
-                  Summarize a runtime mutation with hierarchy context and source candidates.
-
-              wait-for-visible (--test-id <id> | --ref <ref> | --text <text> | --role <role>) [--host <url>] [--udid <sim>] [--bundle-id <id>] [--output <path>]
-                  Poll /snapshot until a visible node matches.
-
-              wait-for-gone (--test-id <id> | --ref <ref> | --text <text> | --role <role>) [--host <url>] [--udid <sim>] [--bundle-id <id>]
-                  Poll until a visible node no longer matches.
-
-              wait-for-value (--test-id <id> | --ref <ref>) --key <path> --equals <value> [--host <url>] [--udid <sim>] [--bundle-id <id>] [--output <path>]
-                  Poll until an inspected node property matches.
-
-              launch --bundle-id <id> [--device booted|--udid <sim>] [--inject] [--dylib <path>] [--env KEY=VALUE]
-                  Launch an iOS Simulator app through simctl. --inject auto-resolves LoupeInjector.
-
-              tap (--test-id <id> | --ref <ref> | --x <n> --y <n>) --udid <sim> [--snapshot <snapshot.json>] [--expect-visible <testID>]
-                  Resolve a Loupe target or coordinate and tap it through the native HID backend.
-
-              swipe|drag --from x,y --to x,y --udid <sim>
-                  Dispatch a one-finger gesture through the native HID backend. Swipe verifies scroll offset changes when possible; pass --no-verify-scroll to opt out.
-
-              pinch --center x,y --start-spread <n> --end-spread <n> --udid <sim>
-                  Parse a two-finger pinch request. Pinch HID dispatch is not implemented yet.
-
-              type <text> --udid <sim>
-                  Type text into the focused field through the native HID backend.
-
-              screenshot --udid <sim> --output <path> [--timeout <seconds>]
-                  Capture a simulator screenshot through simctl.
-
-              screen-map [snapshot.json] [--host <url>] [--udid <sim>] [--bundle-id <id>] [--include-containers] [--limit <n>]
-                  Print visible semantic and styled runtime elements as compact JSON.
-
-              skills install [--target all|codex|claude] [--source <skills/loupe>]
-                  Upsert the Loupe skill into existing Codex or Claude Code skill folders.
-
-              start --bundle-id <id> [--device booted|--udid <sim>] [--port <port>] [--env KEY=VALUE]
-                  Launch and inject the app so the in-app Loupe runtime server starts.
-
-              runtime [--host <url>] [--udid <sim>] [--output <path>] [--timeout <seconds>]
-                  Fetch injected SDK runtime identity and logs.
-            """
-        )
+        printSummaryHelp()
     }
 
     private static func printCommandHelp(_ command: String) {
@@ -1007,7 +966,7 @@ struct LoupeCLI {
         }
     }
 
-    private static func commandUsage(_ command: String) -> String? {
+    static func commandUsage(_ command: String) -> String? {
         switch command {
         case "start":
             return """
@@ -1034,8 +993,14 @@ struct LoupeCLI {
             return "Usage: loupe explore-routes [--host <url>] [--udid <sim>] [--bundle-id <id>] [--limit <n>] [--settle <seconds>] [--back-point x,y] [--trace-dir <dir>] [--output <path>] [--json]"
         case "trace-summary":
             return "Usage: loupe trace-summary <trace-dir> [--json] [--limit <n>]"
+        case "tap":
+            return "Usage: loupe tap (--test-id <id> | --ref <ref> | --x <n> --y <n>) --udid <sim> [--snapshot <snapshot.json>] [--expect-visible <testID>]"
         case "swipe":
             return "Usage: loupe swipe --from x,y --to x,y --udid <sim> [--host <url>] [--duration <seconds>] [--no-verify-scroll] [--trace-dir <path>]"
+        case "drag":
+            return "Usage: loupe drag --from x,y --to x,y --udid <sim> [--host <url>] [--duration <seconds>] [--trace-dir <path>]"
+        case "type":
+            return "Usage: loupe type <text> --udid <sim> [--host <url>] [--trace-dir <path>]"
         case "wait-for-visible":
             return "Usage: loupe wait-for-visible (--test-id <id> | --ref <ref> | --text <text> | --role <role>) [--host <url>] [--udid <sim>] [--bundle-id <id>] [--output <path>] [--timeout <seconds>]"
         case "wait-for-gone":
@@ -1062,10 +1027,18 @@ struct LoupeCLI {
 
             List runtime mutation capabilities globally or for one matched node.
             """
+        case "constraints":
+            return ConstraintListOptions.usage
+        case "set-constraint":
+            return ConstraintMutationOptions.usage(deactivate: false)
+        case "deactivate-constraint":
+            return ConstraintMutationOptions.usage(deactivate: true)
         case "paint-stack":
             return "Usage: loupe paint-stack [snapshot.json] (--point x,y | --ref <ref>) [--host <url>] [--udid <sim>] [--bundle-id <id>] [--limit <n>] [--json]"
         case "current":
             return "Usage: loupe current [--json] [--timeout <seconds>]"
+        case "version", "--version":
+            return "Usage: loupe version\n       loupe --version"
         default:
             return nil
         }
