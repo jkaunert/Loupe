@@ -760,7 +760,11 @@ struct LoupeCLI {
             environment["LOUPE_PORT"] = String(port)
             runtimeUDID = udid
             runtimeHost = host
-            try terminateAppIfRunning(device: udid, bundleID: options.bundleID, timeout: min(5, options.timeout))
+            try terminateAppIfRunning(
+                device: udid,
+                bundleID: options.bundleID,
+                timeout: simctlTerminateTimeout(launchTimeout: options.timeout)
+            )
         }
 
         let request = SimctlLaunchRequest(
@@ -2371,7 +2375,37 @@ struct LoupeCLI {
         }
     }
 
+    static func simctlTerminateTimeout(
+        launchTimeout: TimeInterval,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> TimeInterval {
+        guard
+            let raw = environment["LOUPE_SIMCTL_TERMINATE_TIMEOUT"],
+            let value = TimeInterval(raw),
+            value > 0
+        else {
+            return launchTimeout
+        }
+        return value
+    }
+
     private static func terminateAppIfRunning(device: String, bundleID: String, timeout: TimeInterval) throws {
+        let attempts = 2
+        for attempt in 1...attempts {
+            if try runTerminateApp(device: device, bundleID: bundleID, timeout: timeout) {
+                return
+            }
+            if attempt < attempts {
+                Thread.sleep(forTimeInterval: 0.5)
+            }
+        }
+
+        FileHandle.standardError.write(
+            Data("warning: simctl terminate timed out after \(format(timeout))s for \(bundleID) on \(device); continuing to launch\n".utf8)
+        )
+    }
+
+    private static func runTerminateApp(device: String, bundleID: String, timeout: TimeInterval) throws -> Bool {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
         process.arguments = ["simctl", "terminate", device, bundleID]
@@ -2384,8 +2418,9 @@ struct LoupeCLI {
         try process.run()
         if semaphore.wait(timeout: .now() + timeout) == .timedOut {
             process.terminate()
-            throw CLIError("simctl terminate timed out after \(format(timeout))s for \(bundleID) on \(device)")
+            return false
         }
+        return true
     }
 
     private static func prepareTraceDirectory(_ url: URL) throws {

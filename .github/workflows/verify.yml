@@ -18,6 +18,7 @@ jobs:
     timeout-minutes: 90
     env:
       LOUPE_SIMCTL_LIST_TIMEOUT: "90"
+      LOUPE_SIMCTL_TERMINATE_TIMEOUT: "20"
 
     steps:
       - name: Checkout
