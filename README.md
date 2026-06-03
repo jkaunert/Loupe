@@ -99,14 +99,14 @@ diagnostic loops. These are Loupe-native versions of common agent questions:
 | What still references this service? | Fetch `debug refs` app-authored ownership evidence. Loupe does not claim private heap graph traversal. |
 | Is dark mode hiding text? | Set `env appearance dark`, capture a fresh snapshot, and run `ui audit --kind lowTextContrast`. |
 | Why does this button not respond? | Run `ui hit-test` at the point, inspect the `ui responder-chain`, then compare accessibility and visible view state. |
-| Is this scroll hitching? | Run `perf scroll` with a trace directory, then summarize the trace and verify offset deltas. |
+| Is this scroll hitching? | Run `perf scroll` with a trace directory for simulator gestures, or `--delta`/`--to-offset` for a runtime offset probe, then verify elapsed time and offset deltas. |
 | Did logout clear secrets? | Use `state keychain list` before and after the app's logout flow and assert the expected items are gone. |
 | Does the old feature-flag flow still work? | Change `state flags`, reload or relaunch the runtime, act through the old flow, and diff the resulting trace. |
 
 The examples verify these primitives across iOS Simulator, macOS, and tvOS where
-the platform backend supports them. iOS Simulator also verifies native HID scroll
-profiling; macOS currently uses runtime observation/state evidence rather than a
-host HID action backend.
+the platform backend supports them. iOS Simulator verifies native HID scroll
+profiling; linked macOS and tvOS runtimes verify the runtime offset profiling
+mode without claiming host HID scroll input.
 
 Run the platform examples directly when checking this support:
 

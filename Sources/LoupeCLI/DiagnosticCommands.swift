@@ -32,7 +32,7 @@ extension LoupeCLI {
     Usage: loupe perf <subcommand>
 
     SUBCOMMANDS:
-      scroll                  Dispatch a scroll gesture and record elapsed time.
+      scroll                  Dispatch a scroll gesture or runtime offset probe.
     """
 
     static func debug(_ arguments: [String]) async throws {
@@ -125,6 +125,10 @@ extension LoupeCLI {
         let rest = Array(arguments.dropFirst())
         switch subcommand {
         case "scroll":
+            if RuntimeScrollProfileOptions.usesRuntimeMode(rest) {
+                try await runtimeScrollProfile(rest)
+                return
+            }
             let output = outputValue(in: rest)
             let actionArguments = argumentsRemovingOutput(rest)
             let startedAt = Date()
@@ -263,6 +267,139 @@ extension LoupeCLI {
         return result
     }
 
+    private struct RuntimeScrollProfileOptions {
+        var runtimeOptions: DiagnosticRuntimeOptions
+        var delta: LoupePoint?
+        var toOffset: LoupePoint?
+
+        static func usesRuntimeMode(_ arguments: [String]) -> Bool {
+            arguments.contains("--delta") || arguments.contains("--to-offset")
+        }
+
+        init(_ arguments: [String]) throws {
+            var runtimeArguments: [String] = []
+            var delta: LoupePoint?
+            var toOffset: LoupePoint?
+            var index = 0
+
+            while index < arguments.count {
+                switch arguments[index] {
+                case "--delta":
+                    let value = try Self.value(after: "--delta", in: arguments, index: &index)
+                    delta = try LoupeCLI.diagnosticPoint(value, option: "--delta")
+                case "--to-offset":
+                    let value = try Self.value(after: "--to-offset", in: arguments, index: &index)
+                    toOffset = try LoupeCLI.diagnosticPoint(value, option: "--to-offset")
+                default:
+                    runtimeArguments.append(arguments[index])
+                }
+                index += 1
+            }
+
+            if delta != nil && toOffset != nil {
+                throw CLIError("loupe perf scroll accepts only one of --delta or --to-offset")
+            }
+            if delta == nil && toOffset == nil {
+                throw CLIError("Usage: loupe perf scroll (--from x,y --to x,y --udid <sim> | (--test-id <id>|--ref <ref>|--text <text>|--role <role>) (--delta dx,dy|--to-offset x,y)) [--host <url>] [--output <path>]")
+            }
+
+            self.runtimeOptions = try DiagnosticRuntimeOptions(
+                runtimeArguments,
+                usage: "loupe perf scroll (--test-id <id>|--ref <ref>|--text <text>|--role <role>) (--delta dx,dy|--to-offset x,y) [--host <url>] [--udid <sim>] [--bundle-id <id>] [--output <path>]"
+            )
+            self.delta = delta
+            self.toOffset = toOffset
+        }
+
+        private static func value(after option: String, in arguments: [String], index: inout Int) throws -> String {
+            let valueIndex = index + 1
+            guard valueIndex < arguments.count else {
+                throw CLIError("\(option) requires a value")
+            }
+            index = valueIndex
+            return arguments[valueIndex]
+        }
+    }
+
+    private static func runtimeScrollProfile(_ arguments: [String]) async throws {
+        let options = try RuntimeScrollProfileOptions(arguments)
+        let beforeData = try await runtimeData(path: "/snapshot", options: options.runtimeOptions.runtimeFetchOptions)
+        let beforeSnapshot = try diagnosticJSONDecoder().decode(LoupeSnapshot.self, from: beforeData)
+        let selector = try diagnosticSelector(from: options.runtimeOptions)
+        let matches = LoupeSnapshotQuery.find(
+            selector,
+            in: beforeSnapshot,
+            options: LoupeQueryOptions(includeHidden: false, includeDisabled: true, maxResults: 2)
+        )
+        guard matches.count == 1, let target = matches.first else {
+            throw CLIError("loupe perf scroll expected exactly one scroll target, found \(matches.count)")
+        }
+        guard let beforeNode = beforeSnapshot.nodes[target.ref],
+              let beforeOffset = beforeNode.uiKit?.scrollView?.contentOffset else {
+            throw CLIError("loupe perf scroll target is not a captured scroll view: \(target.testID ?? target.ref)")
+        }
+
+        let requestedOffset = options.toOffset ?? LoupePoint(
+            x: beforeOffset.x + (options.delta?.x ?? 0),
+            y: beforeOffset.y + (options.delta?.y ?? 0)
+        )
+        let request = LoupeMutationRequest(
+            selector: LoupeMutationSelector(kind: .ref, value: target.ref),
+            property: "contentOffset",
+            value: .point(requestedOffset),
+            layout: true,
+            animation: nil
+        )
+
+        let startedAt = Date()
+        let responseData = try await postRuntimeJSON(request, path: "mutate", options: options.runtimeOptions)
+        let response = try diagnosticJSONDecoder().decode(LoupeMutationResponse.self, from: responseData)
+        let elapsed = Date().timeIntervalSince(startedAt)
+        guard let afterOffset = response.after.uiKit?.scrollView?.contentOffset else {
+            throw CLIError("loupe perf scroll mutation response did not include an after scroll offset")
+        }
+
+        let profile = LoupeScrollProfile(
+            ref: target.ref,
+            testID: target.testID,
+            beforeOffset: beforeOffset,
+            afterOffset: afterOffset,
+            delta: LoupePoint(x: afterOffset.x - beforeOffset.x, y: afterOffset.y - beforeOffset.y),
+            actionElapsed: elapsed,
+            traceDirectory: nil
+        )
+        let data = try diagnosticJSONEncoder().encode(profile)
+        try write(data: data, outputURL: options.runtimeOptions.outputURL)
+    }
+
+    private static func diagnosticSelector(from options: DiagnosticRuntimeOptions) throws -> LoupeSelector {
+        if let testID = options.testID {
+            return .testID(testID)
+        }
+        if let ref = options.ref {
+            return .ref(ref)
+        }
+        if let text = options.text {
+            return .text(text)
+        }
+        if let role = options.role {
+            return .role(role)
+        }
+        throw CLIError("loupe perf scroll requires --test-id, --ref, --text, or --role in runtime offset mode")
+    }
+
+    private static func diagnosticPoint(_ value: String, option: String) throws -> LoupePoint {
+        let parts = value.split(separator: ",", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              let x = Double(parts[0]),
+              let y = Double(parts[1]),
+              x.isFinite,
+              y.isFinite else {
+            throw CLIError("\(option) expects x,y")
+        }
+        return LoupePoint(x: x, y: y)
+    }
+
     private struct ScrollTraceProfile {
         var ref: String
         var testID: String?
@@ -302,9 +439,13 @@ extension LoupeCLI {
     }
 
     private static func decodeDiagnosticSnapshot(from url: URL) throws -> LoupeSnapshot {
+        try diagnosticJSONDecoder().decode(LoupeSnapshot.self, from: Data(contentsOf: url))
+    }
+
+    private static func diagnosticJSONDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(LoupeSnapshot.self, from: Data(contentsOf: url))
+        return decoder
     }
 
     static func urlEncode(_ value: String) -> String {

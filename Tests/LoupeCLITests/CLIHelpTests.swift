@@ -115,6 +115,14 @@ import Testing
         #expect(!launch.contains("iOS Simulator app"))
     }
 
+    @Test func perfScrollHelpIncludesRuntimeOffsetMode() throws {
+        let help = try #require(LoupeCLI.commandUsage("perf scroll"))
+
+        #expect(help.contains("--from x,y --to x,y --udid <sim>"))
+        #expect(help.contains("--delta dx,dy|--to-offset x,y"))
+        #expect(help.contains("[--bundle-id <id>]"))
+    }
+
     @Test func publicCommandHelpIsAvailableForActionAndMutationCommands() {
         let publicCommands = [
             "target",

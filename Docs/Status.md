@@ -21,6 +21,8 @@ runtime servers.
 - Dispatch simulator-visible `tap`, `swipe`, `drag`, `type`, and tvOS remote
   `press` through Loupe's native host-side action backend where the simulator
   platform supports it.
+- Profile scroll offset changes through simulator gesture traces or runtime
+  offset probes for linked/runtime platform examples.
 - Resolve action targets through the accessibility tree first, then fall back to
   the view tree when needed.
 - Save action traces with before/after snapshots, accessibility trees, logs,

@@ -112,6 +112,7 @@ HIT_TEST_PATH="/tmp/loupe-tvos-hit-test.json"
 RESPONDER_PATH="/tmp/loupe-tvos-responder-chain.json"
 ENV_PATH="/tmp/loupe-tvos-env.json"
 AUDIT_PATH="/tmp/loupe-tvos-audit.json"
+PERF_PATH="/tmp/loupe-tvos-perf.json"
 INSPECT_ROOT_PATH="/tmp/loupe-tvos-inspect-root.json"
 INSPECT_LIST_PATH="/tmp/loupe-tvos-inspect-list.json"
 INSPECT_EMPTY_PATH="/tmp/loupe-tvos-inspect-empty.json"
@@ -120,7 +121,7 @@ PRESS_SELECT_TRACE_DIR="/tmp/loupe-tvos-press-select-trace"
 PRESS_DOWN_TRACE_DIR="/tmp/loupe-tvos-press-down-trace"
 PRESS_LEGACY_TRACE_DIR="/tmp/loupe-tvos-press-legacy-trace"
 PRESS_LOGOUT_TRACE_DIR="/tmp/loupe-tvos-press-logout-trace"
-rm -f "$SNAPSHOT_PATH" "$DARK_SNAPSHOT_PATH" "$FOCUS_SNAPSHOT_PATH" "$ACCESSIBILITY_PATH" "$RUNTIME_PATH" "$LOGS_PATH" "$PRESS_LOGS_PATH" "$LEGACY_LOGS_PATH" "$LOGOUT_LOGS_PATH" "$NETWORK_PATH" "$REFS_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$FLAG_DISABLED_PATH" "$EMPTY_FLAG_PATH" "$KEYCHAIN_PATH" "$KEYCHAIN_AFTER_LOGOUT_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$ENV_PATH" "$AUDIT_PATH" "$INSPECT_ROOT_PATH" "$INSPECT_LIST_PATH" "$INSPECT_EMPTY_PATH" "$QUERY_PATH"
+rm -f "$SNAPSHOT_PATH" "$DARK_SNAPSHOT_PATH" "$FOCUS_SNAPSHOT_PATH" "$ACCESSIBILITY_PATH" "$RUNTIME_PATH" "$LOGS_PATH" "$PRESS_LOGS_PATH" "$LEGACY_LOGS_PATH" "$LOGOUT_LOGS_PATH" "$NETWORK_PATH" "$REFS_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$FLAG_DISABLED_PATH" "$EMPTY_FLAG_PATH" "$KEYCHAIN_PATH" "$KEYCHAIN_AFTER_LOGOUT_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$ENV_PATH" "$AUDIT_PATH" "$PERF_PATH" "$INSPECT_ROOT_PATH" "$INSPECT_LIST_PATH" "$INSPECT_EMPTY_PATH" "$QUERY_PATH"
 rm -rf "$PRESS_SELECT_TRACE_DIR" "$PRESS_DOWN_TRACE_DIR" "$PRESS_LEGACY_TRACE_DIR" "$PRESS_LOGOUT_TRACE_DIR"
 
 curl -fsS "$HOST/health" | grep -q LoupeKit
@@ -159,6 +160,7 @@ BUTTON_POINT="$(ruby -rjson -e '
 ' "$SNAPSHOT_PATH")"
 .build/debug/loupe ui hit-test --host "$HOST" --point "$BUTTON_POINT" --output "$HIT_TEST_PATH" >/dev/null
 .build/debug/loupe ui responder-chain --host "$HOST" --test-id tv.example.refresh --output "$RESPONDER_PATH" >/dev/null
+.build/debug/loupe perf scroll --host "$HOST" --udid "$DEVICE" --test-id tv.example.collection --delta 0,80 --output "$PERF_PATH" >/dev/null
 .build/debug/loupe press select --host "$HOST" --udid "$DEVICE" --trace-dir "$PRESS_SELECT_TRACE_DIR" --expect-visible tv.example.status
 .build/debug/loupe wait-for-value --host "$HOST" --test-id tv.example.status --key text --equals "Snapshot refreshed" --timeout 5 >/tmp/loupe-tvos-wait-refresh.json
 .build/debug/loupe debug console --host "$HOST" --output "$PRESS_LOGS_PATH" >/dev/null
@@ -334,6 +336,14 @@ ruby -rjson -e '
   responder = JSON.parse(File.read(ARGV.fetch(14)))
   abort "expected tv.example.refresh responder chain" unless responder.fetch("responderChain").any? { |entry| entry["testID"] == "tv.example.refresh" }
 
+  perf = JSON.parse(File.read(ARGV.fetch(29)))
+  abort "expected tvOS perf target" unless perf["testID"] == "tv.example.collection"
+  abort "expected tvOS runtime perf without trace dir" unless perf["traceDirectory"].nil?
+  abort "expected tvOS scroll before offset" unless perf["beforeOffset"].is_a?(Hash)
+  abort "expected tvOS scroll after offset" unless perf["afterOffset"].is_a?(Hash)
+  abort "expected tvOS positive scroll delta" unless perf.dig("delta", "y").to_f > 0
+  abort "expected tvOS profile elapsed" unless perf["actionElapsed"].to_f >= 0
+
   env = JSON.parse(File.read(ARGV.fetch(9)))
   abort "expected dark appearance" unless env["appearance"] == "dark"
 
@@ -343,7 +353,7 @@ ruby -rjson -e '
   abort "unexpected tvOS dark contrast issues: #{bad_contrast.inspect}" unless bad_contrast.empty?
   bad_sentinel = audit.fetch("issues").select { |issue| issue["kind"] == "lowTextContrast" && issue["testID"] == "tv.example.dark.badContrast" }
   abort "expected dark contrast sentinel issue" if bad_sentinel.empty?
-' "$RUNTIME_PATH" "$SNAPSHOT_PATH" "$QUERY_PATH" "$INSPECT_ROOT_PATH" "$INSPECT_LIST_PATH" "$LOGS_PATH" "$NETWORK_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$ENV_PATH" "$DEVICE" "$REFS_PATH" "$KEYCHAIN_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$AUDIT_PATH" "$FOCUS_SNAPSHOT_PATH" "$PRESS_LOGS_PATH" "$PRESS_SELECT_TRACE_DIR" "$PRESS_DOWN_TRACE_DIR" "$ACCESSIBILITY_PATH" "$INSPECT_EMPTY_PATH" "$LEGACY_LOGS_PATH" "$LOGOUT_LOGS_PATH" "$PRESS_LEGACY_TRACE_DIR" "$PRESS_LOGOUT_TRACE_DIR" "$FLAG_DISABLED_PATH" "$EMPTY_FLAG_PATH" "$KEYCHAIN_AFTER_LOGOUT_PATH"
+' "$RUNTIME_PATH" "$SNAPSHOT_PATH" "$QUERY_PATH" "$INSPECT_ROOT_PATH" "$INSPECT_LIST_PATH" "$LOGS_PATH" "$NETWORK_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$ENV_PATH" "$DEVICE" "$REFS_PATH" "$KEYCHAIN_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$AUDIT_PATH" "$FOCUS_SNAPSHOT_PATH" "$PRESS_LOGS_PATH" "$PRESS_SELECT_TRACE_DIR" "$PRESS_DOWN_TRACE_DIR" "$ACCESSIBILITY_PATH" "$INSPECT_EMPTY_PATH" "$LEGACY_LOGS_PATH" "$LOGOUT_LOGS_PATH" "$PRESS_LEGACY_TRACE_DIR" "$PRESS_LOGOUT_TRACE_DIR" "$FLAG_DISABLED_PATH" "$EMPTY_FLAG_PATH" "$KEYCHAIN_AFTER_LOGOUT_PATH" "$PERF_PATH"
 
 echo "tvOS example E2E passed"
 echo "snapshot: $SNAPSHOT_PATH"

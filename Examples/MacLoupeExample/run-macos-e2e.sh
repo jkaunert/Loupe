@@ -24,12 +24,13 @@ HIT_TEST_PATH="/tmp/loupe-macos-hit-test.json"
 RESPONDER_PATH="/tmp/loupe-macos-responder-chain.json"
 ENV_PATH="/tmp/loupe-macos-env.json"
 AUDIT_PATH="/tmp/loupe-macos-audit.json"
+PERF_PATH="/tmp/loupe-macos-perf.json"
 INSPECT_PATH="/tmp/loupe-macos-inspect.json"
 INSPECT_TITLE_PATH="/tmp/loupe-macos-inspect-title.json"
 INSPECT_EMPTY_PATH="/tmp/loupe-macos-inspect-empty.json"
 QUERY_PATH="/tmp/loupe-macos-query.json"
 
-rm -f "$APP_LOG" "$SNAPSHOT_PATH" "$DARK_SNAPSHOT_PATH" "$ACCESSIBILITY_PATH" "$LOGS_PATH" "$NETWORK_PATH" "$REFS_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$EMPTY_FLAG_PATH" "$KEYCHAIN_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$ENV_PATH" "$AUDIT_PATH" "$INSPECT_PATH" "$INSPECT_TITLE_PATH" "$INSPECT_EMPTY_PATH" "$QUERY_PATH"
+rm -f "$APP_LOG" "$SNAPSHOT_PATH" "$DARK_SNAPSHOT_PATH" "$ACCESSIBILITY_PATH" "$LOGS_PATH" "$NETWORK_PATH" "$REFS_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$EMPTY_FLAG_PATH" "$KEYCHAIN_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$ENV_PATH" "$AUDIT_PATH" "$PERF_PATH" "$INSPECT_PATH" "$INSPECT_TITLE_PATH" "$INSPECT_EMPTY_PATH" "$QUERY_PATH"
 
 LOUPE_PORT="$PORT" .build/debug/MacLoupeExample >"$APP_LOG" 2>&1 &
 APP_PID=$!
@@ -86,6 +87,7 @@ BUTTON_POINT="$(ruby -rjson -e '
 ' "$SNAPSHOT_PATH")"
 .build/debug/loupe ui hit-test --host "$HOST" --point "$BUTTON_POINT" --output "$HIT_TEST_PATH" >/dev/null
 .build/debug/loupe ui responder-chain --host "$HOST" --test-id mac.example.refresh --output "$RESPONDER_PATH" >/dev/null
+.build/debug/loupe perf scroll --host "$HOST" --test-id mac.example.list --delta 0,40 --output "$PERF_PATH" >/dev/null
 .build/debug/loupe env appearance dark --host "$HOST" --output "$ENV_PATH" >/dev/null
 .build/debug/loupe observe fetch "$HOST/snapshot" --timeout 10 --output "$DARK_SNAPSHOT_PATH" >/dev/null
 .build/debug/loupe ui audit "$DARK_SNAPSHOT_PATH" --kind lowTextContrast > "$AUDIT_PATH"
@@ -199,6 +201,14 @@ ruby -rjson -e '
   responder = JSON.parse(File.read(ARGV.fetch(11)))
   abort "expected mac.example.refresh responder chain" unless responder.fetch("responderChain").any? { |entry| entry["testID"] == "mac.example.refresh" }
 
+  perf = JSON.parse(File.read(ARGV.fetch(17)))
+  abort "expected macOS perf target" unless perf["testID"] == "mac.example.list"
+  abort "expected macOS runtime perf without trace dir" unless perf["traceDirectory"].nil?
+  abort "expected macOS scroll before offset" unless perf["beforeOffset"].is_a?(Hash)
+  abort "expected macOS scroll after offset" unless perf["afterOffset"].is_a?(Hash)
+  abort "expected macOS positive scroll delta" unless perf.dig("delta", "y").to_f > 0
+  abort "expected macOS profile elapsed" unless perf["actionElapsed"].to_f >= 0
+
   env = JSON.parse(File.read(ARGV.fetch(7)))
   abort "expected dark appearance" unless env["appearance"] == "dark"
 
@@ -208,7 +218,7 @@ ruby -rjson -e '
   abort "unexpected macOS dark contrast issues: #{bad_contrast.inspect}" unless bad_contrast.empty?
   bad_sentinel = audit.fetch("issues").select { |issue| issue["kind"] == "lowTextContrast" && issue["testID"] == "mac.example.dark.badContrast" }
   abort "expected macOS dark contrast sentinel issue" if bad_sentinel.empty?
-' "$SNAPSHOT_PATH" "$QUERY_PATH" "$INSPECT_PATH" "$LOGS_PATH" "$NETWORK_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$ENV_PATH" "$REFS_PATH" "$KEYCHAIN_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$AUDIT_PATH" "$INSPECT_TITLE_PATH" "$ACCESSIBILITY_PATH" "$INSPECT_EMPTY_PATH" "$EMPTY_FLAG_PATH"
+' "$SNAPSHOT_PATH" "$QUERY_PATH" "$INSPECT_PATH" "$LOGS_PATH" "$NETWORK_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$ENV_PATH" "$REFS_PATH" "$KEYCHAIN_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$AUDIT_PATH" "$INSPECT_TITLE_PATH" "$ACCESSIBILITY_PATH" "$INSPECT_EMPTY_PATH" "$EMPTY_FLAG_PATH" "$PERF_PATH"
 
 echo "macOS example E2E passed"
 echo "snapshot: $SNAPSHOT_PATH"

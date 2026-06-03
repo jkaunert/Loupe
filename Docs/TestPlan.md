@@ -155,6 +155,10 @@ does not count as evidence that the CLI or skill improved agent performance.
   `--trace-dir <path>` saves before/after view snapshots, accessibility trees,
   runtime logs, screenshots, action records, and the resolved target query result
   around CLI actions.
+- Scroll profiling:
+  `loupe perf scroll` supports simulator gesture traces with `--from/--to` and
+  runtime offset probes with `--delta` or `--to-offset` for linked/runtime
+  platform examples.
 - Failed runtime actions automatically save `error.json`, failure snapshot,
   accessibility tree, logs, screenshot, and action record under
   `/tmp/loupe-traces`.

@@ -101,14 +101,17 @@ loupe tap --snapshot "$REPORT/snapshot.json" --ref n21 --udid <sim-udid>
 loupe tap --x 201 --y 274 --udid <sim-udid> --width 438 --height 954
 loupe swipe --from 219,760 --to 219,190 --host <runtime-host> --udid <sim-udid> --width 438 --height 954 --trace-dir "$TRACE"
 loupe press select --host <runtime-host> --udid <tvos-sim-udid> --trace-dir "$TRACE"
+loupe perf scroll --test-id feed.list --delta 0,80 --host <runtime-host> --output /tmp/loupe-scroll-profile.json
 loupe trace-summary "$TRACE"
 loupe diff "$TRACE/before-snapshot.json" "$TRACE/after-snapshot.json" --changed-only
 ```
 
 Also use `drag`, `type`, `press`, and `explore-routes` when needed. Treat scroll
 with no offset or visible-frame change as failed unless `--no-verify-scroll` is
-intentional. Preserve failed trace paths until summarized or handed back. Remove
-successful trace dirs unless a later diff/audit needs them. Action traces use
+intentional. Use `perf scroll --delta` or `--to-offset` for linked runtimes that
+can expose scroll state but do not have host HID scroll input. Preserve failed
+trace paths until summarized or handed back. Remove successful trace dirs unless
+a later diff/audit needs them. Action traces use
 `before-snapshot.json`/`after-snapshot.json`; `set-many --trace-dir` uses
 `prev-snapshot.json`/`next-snapshot.json`.
 

@@ -1202,7 +1202,10 @@ struct LoupeCLI {
         case "env appearance":
             return "Usage: loupe env appearance [light|dark|system] [--host <url>] [--udid <sim>] [--bundle-id <id>] [--output <path>]"
         case "perf scroll":
-            return "Usage: loupe perf scroll --from x,y --to x,y --udid <sim> [--host <url>] [--duration <seconds>] [--trace-dir <path>] [--output <path>]"
+            return """
+            Usage: loupe perf scroll --from x,y --to x,y --udid <sim> [--host <url>] [--duration <seconds>] [--trace-dir <path>] [--output <path>]
+                   loupe perf scroll (--test-id <id>|--ref <ref>|--text <text>|--role <role>) (--delta dx,dy|--to-offset x,y) [--host <url>] [--udid <sim>] [--bundle-id <id>] [--output <path>]
+            """
         case "trace summary":
             return "Usage: loupe trace summary <trace-dir> [--json] [--limit <n>]"
         case "trace diff":
