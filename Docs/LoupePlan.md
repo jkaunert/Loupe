@@ -1,11 +1,12 @@
 # Loupe Architecture Notes
 
-Loupe is an iOS Simulator harness for runtime observation, simulator-visible
-input, and fast UI iteration.
+Loupe is an Apple-platform runtime harness for observation, platform-visible
+input where available, diagnostics, and fast UI iteration.
 
 ## Goals
 
-- Capture high-fidelity UIKit and accessibility state from inside the app.
+- Capture high-fidelity UIKit/AppKit and accessibility state from inside the
+  app.
 - Give agents compact context by default and full snapshots on demand.
 - Resolve stable selectors for inspection and action.
 - Execute real simulator input without making XCTest the public harness.
@@ -21,14 +22,15 @@ fixtures.
 
 ```text
 loupe CLI
-  - launches and injects apps
+  - launches and injects simulator apps where injection is supported
+  - talks to linked LoupeKit runtimes for platforms such as macOS
   - records runtime host mappings
   - stores snapshots, reports, screenshots, logs, and traces
   - resolves selectors and dispatches host-side simulator input
 
 LoupeKit / LoupeInjection
-  - runs inside the simulator app
-  - captures view, accessibility, UIKit, layout, style, and metadata state
+  - runs inside the app process
+  - captures view, accessibility, UIKit/AppKit, layout, style, and metadata state
   - exposes localhost runtime endpoints
   - applies allowlisted UIKit mutation experiments on the app main thread
 
@@ -38,7 +40,7 @@ LoupeCore
 ```
 
 Homebrew installs both the CLI and `LoupeInjector.framework`; `loupe start`
-resolves the injector path automatically.
+resolves the injector path automatically for simulator injection workflows.
 
 ## Runtime Selection
 

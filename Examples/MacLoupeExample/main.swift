@@ -86,7 +86,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(button)
         stack.addArrangedSubview(makeDiagnosticControls())
         stack.addArrangedSubview(makeNativeAccessibilityFixture())
+        stack.addArrangedSubview(makeBadContrastLabel())
         stack.addArrangedSubview(list)
+        stack.addArrangedSubview(makeEmptyFeed())
 
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 28),
@@ -127,6 +129,51 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         ])
 
         return scroll
+    }
+
+    private func makeEmptyFeed() -> NSScrollView {
+        let placeholder = NSTextField(labelWithString: "No feed items")
+        placeholder.testID("mac.example.emptyFeed.placeholder")
+        placeholder.font = .systemFont(ofSize: 14, weight: .medium)
+        placeholder.textColor = .secondaryLabelColor
+        placeholder.translatesAutoresizingMaskIntoConstraints = false
+
+        let scroll = NSScrollView()
+        scroll.testID("mac.example.emptyFeed")
+        scroll.hasVerticalScroller = false
+        scroll.documentView = placeholder
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.heightAnchor.constraint(equalToConstant: 52).isActive = true
+
+        NSLayoutConstraint.activate([
+            placeholder.widthAnchor.constraint(equalTo: scroll.widthAnchor, constant: -18),
+        ])
+
+        return scroll
+    }
+
+    private func makeBadContrastLabel() -> NSView {
+        let host = NSView()
+        host.testID("mac.example.dark.badContrast.host")
+        host.wantsLayer = true
+        host.layer?.backgroundColor = NSColor(calibratedRed: 0.10, green: 0.10, blue: 0.10, alpha: 1).cgColor
+        host.translatesAutoresizingMaskIntoConstraints = false
+        host.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        host.widthAnchor.constraint(equalToConstant: 180).isActive = true
+
+        let label = NSTextField(labelWithString: "Dark contrast sentinel")
+        label.testID("mac.example.dark.badContrast")
+        label.font = .systemFont(ofSize: 14, weight: .medium)
+        label.textColor = NSColor(calibratedRed: 0.11, green: 0.11, blue: 0.11, alpha: 1)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        host.addSubview(label)
+
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: 8),
+            label.centerYAnchor.constraint(equalTo: host.centerYAnchor),
+        ])
+
+        return host
     }
 
     private func makeDiagnosticControls() -> NSStackView {
@@ -177,6 +224,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func publishRuntimeFixtures() {
         UserDefaults.standard.set(false, forKey: "mac-new-nav")
+        UserDefaults.standard.set(true, forKey: "mac-empty-feed")
 
         Loupe.log(
             "mac_example_visible",
@@ -185,12 +233,30 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 "platform": .string("macOS"),
             ]
         )
+        Loupe.log(
+            "mac_example_empty_feed",
+            metadata: [
+                "screen": .string("feed"),
+                "reason": .string("api_returned_empty_items"),
+                "flag": .string("mac-empty-feed"),
+            ]
+        )
         Loupe.recordNetwork(
             url: "https://api.example.test/macos/workbench",
             method: "GET",
             statusCode: 200,
             responseBody: #"{"platform":"macOS","status":"ok"}"#,
             metadata: ["screen": .string("workbench")]
+        )
+        Loupe.recordNetwork(
+            url: "https://api.example.test/macos/feed",
+            method: "GET",
+            statusCode: 204,
+            responseBody: #"{"items":[]}"#,
+            metadata: [
+                "screen": .string("feed"),
+                "empty": .bool(true),
+            ]
         )
         Loupe.recordReference(
             owner: "MacWorkbenchController",

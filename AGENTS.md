@@ -1,7 +1,7 @@
 # Loupe Agent Guide
 
-This repository is a SwiftPM/Xcode prototype for Loupe, an iOS Simulator
-inspection and action harness.
+This repository is a SwiftPM/Xcode prototype for Loupe, an Apple-platform
+runtime inspection, diagnostic, and action harness.
 
 Use this file as a map, not as a full manual. Keep deeper project state in
 `Docs/Status.md` and product direction in `Docs/LoupePlan.md`.
@@ -11,13 +11,18 @@ Use this file as a map, not as a full manual. Keep deeper project state in
 - `Sources/LoupeCore`: snapshot models, accessibility tree models, compact
   observations, queries, inspection, layout audit, simctl helpers, injector path
   resolution.
-- `Sources/LoupeKit`: in-app iOS SDK and localhost observation server.
+- `Sources/LoupeKit`: linked or injected in-app SDK and localhost observation
+  server for Apple-platform runtimes.
 - `Sources/LoupeInjection`: simulator-only injected library that starts
   `LoupeServer`.
 - `Sources/LoupeCLI`: host CLI for fetch, compact, query, inspect, audit,
   launch, doctor, runtime actions, and injector path lookup.
 - `Examples/LoupeExample`: UIKit simulator app used to prove injection,
   snapshotting, and coordinate resolution for UI actions.
+- `Examples/MacLoupeExample`: linked AppKit runtime used to prove macOS
+  snapshots, accessibility, diagnostics, state, and layout audit coverage.
+- `Examples/LoupeTVExample`: tvOS Simulator runtime used to prove view-tree
+  coverage, remote press actions, focus state, diagnostics, and state flows.
 - `skills/loupe`: draft Codex skill for Loupe workflows.
 
 ## Architecture Rules
@@ -75,6 +80,14 @@ Verify the bookmark app-style E2E route:
 
 ```bash
 Examples/LoupeExample/run-bookmark-e2e.sh
+```
+
+Verify platform runtime builds and linked/runtime platform examples:
+
+```bash
+scripts/verify-platform-builds.sh
+Examples/MacLoupeExample/run-macos-e2e.sh
+Examples/LoupeTVExample/run-tvos-runtime-e2e.sh
 ```
 
 Verify the legacy UIKit XCTest example flow:

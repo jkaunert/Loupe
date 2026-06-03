@@ -1213,14 +1213,14 @@ struct LoupeCLI {
             return """
             Usage: loupe start --bundle-id <id> [--device <sim>|--udid <sim>] [--port <port>] [--env KEY=VALUE] [--timeout <seconds>]
 
-            Launch and inject an iOS Simulator app so the in-app Loupe runtime starts.
+            Launch and inject an Apple simulator app so the in-app Loupe runtime starts.
             --device and --udid accept a simulator UDID, simulator name, or booted.
             """
         case "launch":
             return """
             Usage: loupe launch --bundle-id <id> [--device <sim>|--udid <sim>] [--inject] [--dylib <path>] [--env KEY=VALUE] [--timeout <seconds>]
 
-            Launch an iOS Simulator app through simctl. Use --inject to auto-resolve LoupeInjector.
+            Launch an Apple simulator app through simctl. Use --inject to auto-resolve LoupeInjector when the platform supports injection.
             """
         case "set-many":
             return BatchMutationOptions.usage

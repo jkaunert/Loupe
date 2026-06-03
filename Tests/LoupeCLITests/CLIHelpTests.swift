@@ -105,6 +105,16 @@ import Testing
         }
     }
 
+    @Test func simulatorLaunchHelpIsNotIOSOnly() throws {
+        let start = try #require(LoupeCLI.commandUsage("start"))
+        let launch = try #require(LoupeCLI.commandUsage("launch"))
+
+        #expect(start.contains("Apple simulator app"))
+        #expect(launch.contains("Apple simulator app"))
+        #expect(!start.contains("iOS Simulator app"))
+        #expect(!launch.contains("iOS Simulator app"))
+    }
+
     @Test func publicCommandHelpIsAvailableForActionAndMutationCommands() {
         let publicCommands = [
             "target",

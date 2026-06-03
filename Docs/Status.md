@@ -1,6 +1,6 @@
 # Loupe Status
 
-Last verified: 2026-05-22.
+Last verified: 2026-06-03.
 
 Loupe is a runtime diagnostic and E2E harness for Apple-platform apps. The
 current product surface is the `loupe` CLI plus injected or linked LoupeKit
@@ -18,8 +18,9 @@ runtime servers.
 - Read app-authored network events, reference evidence, defaults/flags, and
   keychain metadata from the running app.
 - Query and inspect nodes by `testID`, text, role, or ref.
-- Dispatch simulator-visible `tap`, `swipe`, `drag`, and `type` through Loupe's
-  native host-side HID backend.
+- Dispatch simulator-visible `tap`, `swipe`, `drag`, `type`, and tvOS remote
+  `press` through Loupe's native host-side action backend where the simulator
+  platform supports it.
 - Resolve action targets through the accessibility tree first, then fall back to
   the view tree when needed.
 - Save action traces with before/after snapshots, accessibility trees, logs,
@@ -50,6 +51,9 @@ It runs:
 - runtime injection smoke E2E
 - native HID and UIKit scenario E2E
 - bookmark app-style E2E
+- platform build checks for iOS, macOS, and tvOS support targets
+- linked macOS AppKit runtime E2E
+- tvOS Simulator runtime and remote press E2E
 
 GitHub Actions uses the same command for the `Post-change E2E` required check.
 

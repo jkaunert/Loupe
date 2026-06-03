@@ -1,9 +1,9 @@
 # Loupe Test Plan
 
 This plan tracks whether Loupe can support a repeated developer loop:
-observe the app, act through the simulator, inspect exact UIKit state on demand,
-and validate functional or design regressions without making XCTest the public
-harness.
+observe the app, act through the available platform backend, inspect exact
+UIKit/AppKit state on demand, and validate functional or design regressions
+without making XCTest the public harness.
 
 ## Post-Change Harness
 
@@ -22,6 +22,9 @@ Actions required check. It runs:
 - `Examples/LoupeExample/run-runtime-e2e.sh`
 - `Examples/LoupeExample/run-native-scenarios.sh`
 - `Examples/LoupeExample/run-bookmark-e2e.sh`
+- `scripts/verify-platform-builds.sh`
+- `Examples/MacLoupeExample/run-macos-e2e.sh`
+- `Examples/LoupeTVExample/run-tvos-runtime-e2e.sh`
 
 If local simulator state blocks E2E, record the failing script, exit status,
 and the generated `/tmp/loupe-*` logs or screenshots before handing work back.
@@ -72,6 +75,12 @@ does not count as evidence that the CLI or skill improved agent performance.
   `Examples/LoupeExample/run-native-scenarios.sh`
 - Bookmark app-style E2E scenario:
   `Examples/LoupeExample/run-bookmark-e2e.sh`
+- Platform build coverage:
+  `scripts/verify-platform-builds.sh`
+- Linked macOS AppKit runtime E2E:
+  `Examples/MacLoupeExample/run-macos-e2e.sh`
+- tvOS Simulator runtime and remote press E2E:
+  `Examples/LoupeTVExample/run-tvos-runtime-e2e.sh`
 - Navigation pop by interactive edge gesture.
 - Navigation push by Loupe selector tap.
 - Navigation pop by Loupe ref tap.

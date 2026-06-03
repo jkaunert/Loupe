@@ -1,9 +1,10 @@
 # Runtime Communication
 
-Loupe injection starts `LoupeServer` inside the simulator app process and binds
-HTTP to `127.0.0.1`. The CLI talks to that local server with `--host`; it uses
-`--udid` only to validate that the contacted server belongs to the expected
-simulator.
+Loupe starts `LoupeServer` inside the app process, either through simulator
+injection or by linking `LoupeKit`, and binds HTTP to `127.0.0.1`. The CLI talks
+to that local server with `--host`; it uses `--udid` only to validate that the
+contacted server belongs to the expected simulator when the runtime is simulator
+backed.
 
 The SDK default port is `8765` when an app starts LoupeKit directly. Treat that
 as an SDK fallback, not as a CLI workflow assumption. The CLI launch path is
@@ -19,7 +20,7 @@ silently talking to the wrong runtime.
 
 HTTPS is not required for this path. Loupe is not making the app call an
 external service; the host CLI is calling the app's loopback server inside the
-iOS Simulator. The server binds only to localhost.
+same machine's app runtime. The server binds only to localhost.
 
 ## App To Loupe
 

@@ -18,6 +18,7 @@ NETWORK_PATH="/tmp/loupe-macos-network.json"
 REFS_PATH="/tmp/loupe-macos-refs.json"
 FLAG_PATH="/tmp/loupe-macos-flag.json"
 FLAG_SET_PATH="/tmp/loupe-macos-flag-set.json"
+EMPTY_FLAG_PATH="/tmp/loupe-macos-empty-flag.json"
 KEYCHAIN_PATH="/tmp/loupe-macos-keychain.json"
 HIT_TEST_PATH="/tmp/loupe-macos-hit-test.json"
 RESPONDER_PATH="/tmp/loupe-macos-responder-chain.json"
@@ -25,9 +26,10 @@ ENV_PATH="/tmp/loupe-macos-env.json"
 AUDIT_PATH="/tmp/loupe-macos-audit.json"
 INSPECT_PATH="/tmp/loupe-macos-inspect.json"
 INSPECT_TITLE_PATH="/tmp/loupe-macos-inspect-title.json"
+INSPECT_EMPTY_PATH="/tmp/loupe-macos-inspect-empty.json"
 QUERY_PATH="/tmp/loupe-macos-query.json"
 
-rm -f "$APP_LOG" "$SNAPSHOT_PATH" "$DARK_SNAPSHOT_PATH" "$ACCESSIBILITY_PATH" "$LOGS_PATH" "$NETWORK_PATH" "$REFS_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$KEYCHAIN_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$ENV_PATH" "$AUDIT_PATH" "$INSPECT_PATH" "$INSPECT_TITLE_PATH" "$QUERY_PATH"
+rm -f "$APP_LOG" "$SNAPSHOT_PATH" "$DARK_SNAPSHOT_PATH" "$ACCESSIBILITY_PATH" "$LOGS_PATH" "$NETWORK_PATH" "$REFS_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$EMPTY_FLAG_PATH" "$KEYCHAIN_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$ENV_PATH" "$AUDIT_PATH" "$INSPECT_PATH" "$INSPECT_TITLE_PATH" "$INSPECT_EMPTY_PATH" "$QUERY_PATH"
 
 LOUPE_PORT="$PORT" .build/debug/MacLoupeExample >"$APP_LOG" 2>&1 &
 APP_PID=$!
@@ -66,12 +68,14 @@ done
 .build/debug/loupe inspect query "$SNAPSHOT_PATH" --test-id mac.example.list > "$QUERY_PATH"
 .build/debug/loupe inspect "$SNAPSHOT_PATH" --test-id mac.example.root > "$INSPECT_PATH"
 .build/debug/loupe inspect "$SNAPSHOT_PATH" --test-id mac.example.title > "$INSPECT_TITLE_PATH"
+.build/debug/loupe inspect "$SNAPSHOT_PATH" --test-id mac.example.emptyFeed > "$INSPECT_EMPTY_PATH"
 .build/debug/loupe observe fetch "$HOST/accessibility" --timeout 10 --output "$ACCESSIBILITY_PATH" >/dev/null
 .build/debug/loupe debug console --host "$HOST" --output "$LOGS_PATH" >/dev/null
 .build/debug/loupe debug network --host "$HOST" --output "$NETWORK_PATH" >/dev/null
 .build/debug/loupe debug refs --host "$HOST" --output "$REFS_PATH" >/dev/null
 .build/debug/loupe state flags get mac-new-nav --host "$HOST" --output "$FLAG_PATH" >/dev/null
 .build/debug/loupe state flags set mac-new-nav --bool true --host "$HOST" --output "$FLAG_SET_PATH" >/dev/null
+.build/debug/loupe state flags get mac-empty-feed --host "$HOST" --output "$EMPTY_FLAG_PATH" >/dev/null
 .build/debug/loupe state keychain list --host "$HOST" --output "$KEYCHAIN_PATH" >/dev/null
 BUTTON_POINT="$(ruby -rjson -e '
   snapshot = JSON.parse(File.read(ARGV.fetch(0)))
@@ -109,6 +113,13 @@ ruby -rjson -e '
   abort "expected AppKit label line break mode" unless title.dig("uiKit", "label", "lineBreakMode")
 
   by_test_id = snapshot.fetch("nodes").values.each_with_object({}) { |node, map| map[node["testID"]] = node if node["testID"] }
+  abort "missing mac.example.emptyFeed" unless by_test_id["mac.example.emptyFeed"]
+  empty = JSON.parse(File.read(ARGV.fetch(15))).fetch("node")
+  abort "expected AppKit empty feed scroll view" unless empty.dig("uiKit", "className") == "NSScrollView"
+  abort "expected empty feed role" unless empty["role"] == "scrollView"
+  empty_rows = snapshot.fetch("nodes").values.select { |node| node["testID"]&.start_with?("mac.example.emptyFeed.row") }
+  abort "expected no rendered empty feed rows" unless empty_rows.empty?
+
   segmented = by_test_id.fetch("mac.example.segmented")
   abort "expected AppKit segmented role" unless segmented["role"] == "segmentedControl"
   abort "expected AppKit segmented selection" unless segmented.dig("uiKit", "segmentedControl", "selectedSegmentIndex") == 1
@@ -152,6 +163,7 @@ ruby -rjson -e '
 
   logs = JSON.parse(File.read(ARGV.fetch(3)))
   abort "missing mac_example_visible log" unless logs.any? { |entry| entry["message"] == "mac_example_visible" }
+  abort "missing macOS empty-feed diagnostic log" unless logs.any? { |entry| entry["message"] == "mac_example_empty_feed" && entry.dig("metadata", "reason", "value") == "api_returned_empty_items" }
 
   network = JSON.parse(File.read(ARGV.fetch(4)))
   event = network.find { |entry| entry["url"] == "https://api.example.test/macos/workbench" }
@@ -160,6 +172,11 @@ ruby -rjson -e '
   abort "expected macOS GET method" unless event["method"] == "GET"
   abort "expected macOS network metadata" unless event.dig("metadata", "screen", "value") == "workbench"
   abort "expected macOS response body" unless event["responseBody"]&.include?("macOS")
+  feed_event = network.find { |entry| entry["url"] == "https://api.example.test/macos/feed" }
+  abort "missing macOS empty feed network fixture" unless feed_event
+  abort "expected macOS empty feed 204" unless feed_event["statusCode"] == 204
+  abort "expected macOS empty feed metadata" unless feed_event.dig("metadata", "empty", "value") == true
+  abort "expected macOS empty feed response body" unless feed_event["responseBody"]&.include?("\"items\":[]")
 
   refs = JSON.parse(File.read(ARGV.fetch(8)))
   abort "missing macOS reference evidence" unless refs.any? { |entry| entry["owner"] == "MacWorkbenchController" && entry["target"] == "DeviceActuationService" }
@@ -169,6 +186,9 @@ ruby -rjson -e '
 
   flag_set = JSON.parse(File.read(ARGV.fetch(6)))
   abort "expected mac-new-nav=true after set" unless flag_set.dig("after", "value") == true
+
+  empty_flag = JSON.parse(File.read(ARGV.fetch(16)))
+  abort "expected mac-empty-feed=true" unless empty_flag.dig("value", "value") == true
 
   keychain = JSON.parse(File.read(ARGV.fetch(9)))
   abort "missing macOS keychain fixture metadata" unless keychain.any? { |entry| entry["service"] == "dev.loupe.macos-example" && entry["account"] == "fixture" }
@@ -186,7 +206,9 @@ ruby -rjson -e '
   target_ids = ["mac.example.title", "mac.example.status", "mac.example.refresh"]
   bad_contrast = audit.fetch("issues").select { |issue| issue["kind"] == "lowTextContrast" && target_ids.include?(issue["testID"]) }
   abort "unexpected macOS dark contrast issues: #{bad_contrast.inspect}" unless bad_contrast.empty?
-' "$SNAPSHOT_PATH" "$QUERY_PATH" "$INSPECT_PATH" "$LOGS_PATH" "$NETWORK_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$ENV_PATH" "$REFS_PATH" "$KEYCHAIN_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$AUDIT_PATH" "$INSPECT_TITLE_PATH" "$ACCESSIBILITY_PATH"
+  bad_sentinel = audit.fetch("issues").select { |issue| issue["kind"] == "lowTextContrast" && issue["testID"] == "mac.example.dark.badContrast" }
+  abort "expected macOS dark contrast sentinel issue" if bad_sentinel.empty?
+' "$SNAPSHOT_PATH" "$QUERY_PATH" "$INSPECT_PATH" "$LOGS_PATH" "$NETWORK_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$ENV_PATH" "$REFS_PATH" "$KEYCHAIN_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$AUDIT_PATH" "$INSPECT_TITLE_PATH" "$ACCESSIBILITY_PATH" "$INSPECT_EMPTY_PATH" "$EMPTY_FLAG_PATH"
 
 echo "macOS example E2E passed"
 echo "snapshot: $SNAPSHOT_PATH"

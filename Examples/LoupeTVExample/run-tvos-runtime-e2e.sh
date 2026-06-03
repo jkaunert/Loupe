@@ -94,25 +94,34 @@ done
 SNAPSHOT_PATH="/tmp/loupe-tvos-snapshot.json"
 DARK_SNAPSHOT_PATH="/tmp/loupe-tvos-dark-snapshot.json"
 FOCUS_SNAPSHOT_PATH="/tmp/loupe-tvos-focus-snapshot.json"
+ACCESSIBILITY_PATH="/tmp/loupe-tvos-accessibility.json"
 RUNTIME_PATH="/tmp/loupe-tvos-runtime.json"
 LOGS_PATH="/tmp/loupe-tvos-logs.json"
 PRESS_LOGS_PATH="/tmp/loupe-tvos-press-logs.json"
+LEGACY_LOGS_PATH="/tmp/loupe-tvos-legacy-logs.json"
+LOGOUT_LOGS_PATH="/tmp/loupe-tvos-logout-logs.json"
 NETWORK_PATH="/tmp/loupe-tvos-network.json"
 REFS_PATH="/tmp/loupe-tvos-refs.json"
 FLAG_PATH="/tmp/loupe-tvos-flag.json"
 FLAG_SET_PATH="/tmp/loupe-tvos-flag-set.json"
+FLAG_DISABLED_PATH="/tmp/loupe-tvos-flag-disabled.json"
+EMPTY_FLAG_PATH="/tmp/loupe-tvos-empty-flag.json"
 KEYCHAIN_PATH="/tmp/loupe-tvos-keychain.json"
+KEYCHAIN_AFTER_LOGOUT_PATH="/tmp/loupe-tvos-keychain-after-logout.json"
 HIT_TEST_PATH="/tmp/loupe-tvos-hit-test.json"
 RESPONDER_PATH="/tmp/loupe-tvos-responder-chain.json"
 ENV_PATH="/tmp/loupe-tvos-env.json"
 AUDIT_PATH="/tmp/loupe-tvos-audit.json"
 INSPECT_ROOT_PATH="/tmp/loupe-tvos-inspect-root.json"
 INSPECT_LIST_PATH="/tmp/loupe-tvos-inspect-list.json"
+INSPECT_EMPTY_PATH="/tmp/loupe-tvos-inspect-empty.json"
 QUERY_PATH="/tmp/loupe-tvos-query.json"
 PRESS_SELECT_TRACE_DIR="/tmp/loupe-tvos-press-select-trace"
 PRESS_DOWN_TRACE_DIR="/tmp/loupe-tvos-press-down-trace"
-rm -f "$SNAPSHOT_PATH" "$DARK_SNAPSHOT_PATH" "$FOCUS_SNAPSHOT_PATH" "$RUNTIME_PATH" "$LOGS_PATH" "$PRESS_LOGS_PATH" "$NETWORK_PATH" "$REFS_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$KEYCHAIN_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$ENV_PATH" "$AUDIT_PATH" "$INSPECT_ROOT_PATH" "$INSPECT_LIST_PATH" "$QUERY_PATH"
-rm -rf "$PRESS_SELECT_TRACE_DIR" "$PRESS_DOWN_TRACE_DIR"
+PRESS_LEGACY_TRACE_DIR="/tmp/loupe-tvos-press-legacy-trace"
+PRESS_LOGOUT_TRACE_DIR="/tmp/loupe-tvos-press-logout-trace"
+rm -f "$SNAPSHOT_PATH" "$DARK_SNAPSHOT_PATH" "$FOCUS_SNAPSHOT_PATH" "$ACCESSIBILITY_PATH" "$RUNTIME_PATH" "$LOGS_PATH" "$PRESS_LOGS_PATH" "$LEGACY_LOGS_PATH" "$LOGOUT_LOGS_PATH" "$NETWORK_PATH" "$REFS_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$FLAG_DISABLED_PATH" "$EMPTY_FLAG_PATH" "$KEYCHAIN_PATH" "$KEYCHAIN_AFTER_LOGOUT_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$ENV_PATH" "$AUDIT_PATH" "$INSPECT_ROOT_PATH" "$INSPECT_LIST_PATH" "$INSPECT_EMPTY_PATH" "$QUERY_PATH"
+rm -rf "$PRESS_SELECT_TRACE_DIR" "$PRESS_DOWN_TRACE_DIR" "$PRESS_LEGACY_TRACE_DIR" "$PRESS_LOGOUT_TRACE_DIR"
 
 curl -fsS "$HOST/health" | grep -q LoupeKit
 .build/debug/loupe runtime info --host "$HOST" --udid "$DEVICE" > "$RUNTIME_PATH"
@@ -132,11 +141,14 @@ done
 .build/debug/loupe inspect query "$SNAPSHOT_PATH" --test-id tv.example.collection > "$QUERY_PATH"
 .build/debug/loupe inspect "$SNAPSHOT_PATH" --test-id tv.example.root > "$INSPECT_ROOT_PATH"
 .build/debug/loupe inspect "$SNAPSHOT_PATH" --test-id tv.example.collection > "$INSPECT_LIST_PATH"
+.build/debug/loupe inspect "$SNAPSHOT_PATH" --test-id tv.example.emptyFeed > "$INSPECT_EMPTY_PATH"
+.build/debug/loupe observe fetch "$HOST/accessibility" --timeout 10 --output "$ACCESSIBILITY_PATH" >/dev/null
 .build/debug/loupe debug console --host "$HOST" --output "$LOGS_PATH" >/dev/null
 .build/debug/loupe debug network --host "$HOST" --output "$NETWORK_PATH" >/dev/null
 .build/debug/loupe debug refs --host "$HOST" --output "$REFS_PATH" >/dev/null
 .build/debug/loupe state flags get tv-new-nav --host "$HOST" --output "$FLAG_PATH" >/dev/null
 .build/debug/loupe state flags set tv-new-nav --bool true --host "$HOST" --output "$FLAG_SET_PATH" >/dev/null
+.build/debug/loupe state flags get tv-empty-feed --host "$HOST" --output "$EMPTY_FLAG_PATH" >/dev/null
 .build/debug/loupe state keychain list --host "$HOST" --output "$KEYCHAIN_PATH" >/dev/null
 BUTTON_POINT="$(ruby -rjson -e '
   snapshot = JSON.parse(File.read(ARGV.fetch(0)))
@@ -153,6 +165,17 @@ BUTTON_POINT="$(ruby -rjson -e '
 .build/debug/loupe observe fetch "$HOST/snapshot" --timeout 10 --output "$SNAPSHOT_PATH" >/dev/null
 .build/debug/loupe press down --host "$HOST" --udid "$DEVICE" --trace-dir "$PRESS_DOWN_TRACE_DIR" --expect-visible tv.example.secondary
 .build/debug/loupe observe fetch "$HOST/snapshot" --timeout 10 --output "$FOCUS_SNAPSHOT_PATH" >/dev/null
+.build/debug/loupe state flags set tv-new-nav --bool false --host "$HOST" --output "$FLAG_DISABLED_PATH" >/dev/null
+.build/debug/loupe press down --host "$HOST" --udid "$DEVICE" --expect-visible tv.example.logout
+.build/debug/loupe press down --host "$HOST" --udid "$DEVICE" --expect-visible tv.example.legacyFlow
+.build/debug/loupe press select --host "$HOST" --udid "$DEVICE" --trace-dir "$PRESS_LEGACY_TRACE_DIR" --expect-visible tv.example.status
+.build/debug/loupe wait-for-value --host "$HOST" --test-id tv.example.status --key text --equals "Legacy flow active" --timeout 5 >/tmp/loupe-tvos-wait-legacy.json
+.build/debug/loupe debug console --host "$HOST" --output "$LEGACY_LOGS_PATH" >/dev/null
+.build/debug/loupe press up --host "$HOST" --udid "$DEVICE" --expect-visible tv.example.logout
+.build/debug/loupe press select --host "$HOST" --udid "$DEVICE" --trace-dir "$PRESS_LOGOUT_TRACE_DIR" --expect-visible tv.example.status
+.build/debug/loupe wait-for-value --host "$HOST" --test-id tv.example.status --key text --equals "Logged out" --timeout 5 >/tmp/loupe-tvos-wait-logout.json
+.build/debug/loupe state keychain list --host "$HOST" --output "$KEYCHAIN_AFTER_LOGOUT_PATH" >/dev/null
+.build/debug/loupe debug console --host "$HOST" --output "$LOGOUT_LOGS_PATH" >/dev/null
 .build/debug/loupe env appearance dark --host "$HOST" --output "$ENV_PATH" >/dev/null
 .build/debug/loupe observe fetch "$HOST/snapshot" --timeout 10 --output "$DARK_SNAPSHOT_PATH" >/dev/null
 .build/debug/loupe ui audit "$DARK_SNAPSHOT_PATH" --kind lowTextContrast > "$AUDIT_PATH"
@@ -166,9 +189,11 @@ ruby -rjson -e '
 
   snapshot = JSON.parse(File.read(ARGV.fetch(1)))
   focus_snapshot = JSON.parse(File.read(ARGV.fetch(16)))
+  accessibility = JSON.parse(File.read(ARGV.fetch(20)))
   size = snapshot.fetch("screen").fetch("size")
   abort "expected nonzero tvOS screen" unless size.fetch("width") > 0 && size.fetch("height") > 0
   abort "missing tv.example.collection" unless snapshot.fetch("nodes").values.any? { |node| node["testID"] == "tv.example.collection" }
+  abort "missing tv.example.emptyFeed" unless snapshot.fetch("nodes").values.any? { |node| node["testID"] == "tv.example.emptyFeed" }
 
   query = JSON.parse(File.read(ARGV.fetch(2)))
   abort "expected query match for tv.example.collection" unless query.any? { |node| node["testID"] == "tv.example.collection" }
@@ -182,6 +207,16 @@ ruby -rjson -e '
   abort "expected tvOS list role" unless list["role"] == "scrollView"
   abort "expected tvOS list scroll properties" unless list.dig("uiKit", "scrollView", "isScrollEnabled") == true
   abort "expected tvOS list content taller than frame" unless list.dig("uiKit", "scrollView", "contentSize", "height").to_f > list.fetch("frame").fetch("height").to_f
+
+  empty = JSON.parse(File.read(ARGV.fetch(21))).fetch("node")
+  abort "expected empty feed scroll view" unless empty.dig("uiKit", "className") == "UIScrollView"
+  abort "expected empty feed role" unless empty["role"] == "scrollView"
+  empty_children = snapshot.fetch("nodes").values.select { |node| node["testID"]&.start_with?("tv.example.emptyFeed.row") }
+  abort "expected no rendered empty feed rows" unless empty_children.empty?
+
+  ax_nodes = accessibility.fetch("nodes").values
+  abort "missing tvOS accessibility tree refresh button" unless ax_nodes.any? { |node| node["testID"] == "tv.example.refresh" && node["role"] == "button" }
+  abort "missing tvOS accessibility tree logout button" unless ax_nodes.any? { |node| node["testID"] == "tv.example.logout" && node["role"] == "button" }
 
   refresh = snapshot.fetch("nodes").values.find { |node| node["testID"] == "tv.example.refresh" }
   abort "missing tv.example.refresh focused node" unless refresh
@@ -208,15 +243,26 @@ ruby -rjson -e '
 
   logs = JSON.parse(File.read(ARGV.fetch(5)))
   abort "missing tv_example_visible log" unless logs.any? { |entry| entry["message"] == "tv_example_visible" }
+  abort "missing empty-feed diagnostic log" unless logs.any? { |entry| entry["message"] == "tv_example_empty_feed" && entry.dig("metadata", "reason", "value") == "api_returned_empty_items" }
 
   press_logs = JSON.parse(File.read(ARGV.fetch(17)))
   abort "missing tv_example_refresh_triggered log after press select" unless press_logs.any? { |entry| entry["message"] == "tv_example_refresh_triggered" }
 
+  legacy_logs = JSON.parse(File.read(ARGV.fetch(22)))
+  abort "missing legacy flow log after flag disabled" unless legacy_logs.any? { |entry| entry["message"] == "tv_example_legacy_flow" }
+
+  logout_logs = JSON.parse(File.read(ARGV.fetch(23)))
+  abort "missing logout keychain-clear log" unless logout_logs.any? { |entry| entry["message"] == "tv_example_logout_cleared_keychain" }
+
   select_trace = ARGV.fetch(18)
   down_trace = ARGV.fetch(19)
+  legacy_trace = ARGV.fetch(24)
+  logout_trace = ARGV.fetch(25)
   ["action-before.json", "action-target.json", "action-after.json", "before-snapshot.json", "after-snapshot.json"].each do |name|
     abort "missing select press trace #{name}" unless File.exist?(File.join(select_trace, name))
     abort "missing down press trace #{name}" unless File.exist?(File.join(down_trace, name))
+    abort "missing legacy press trace #{name}" unless File.exist?(File.join(legacy_trace, name))
+    abort "missing logout press trace #{name}" unless File.exist?(File.join(logout_trace, name))
   end
   select_action = JSON.parse(File.read(File.join(select_trace, "action-target.json")))
   abort "expected select press trace command" unless select_action["command"] == "press"
@@ -228,6 +274,22 @@ ruby -rjson -e '
   abort "expected down press trace button" unless down_action["press"] == "down"
   abort "expected down remotePress source" unless down_action["resolvedSource"] == "remotePress:down"
 
+  legacy_action = JSON.parse(File.read(File.join(legacy_trace, "action-target.json")))
+  abort "expected legacy select trace command" unless legacy_action["command"] == "press"
+  abort "expected legacy select trace button" unless legacy_action["press"] == "select"
+
+  logout_action = JSON.parse(File.read(File.join(logout_trace, "action-target.json")))
+  abort "expected logout select trace command" unless logout_action["command"] == "press"
+  abort "expected logout select trace button" unless logout_action["press"] == "select"
+
+  legacy_after = JSON.parse(File.read(File.join(legacy_trace, "after-snapshot.json")))
+  legacy_status = legacy_after.fetch("nodes").values.find { |node| node["testID"] == "tv.example.status" }
+  abort "expected legacy trace after snapshot to show old flow" unless legacy_status && legacy_status["text"] == "Legacy flow active"
+
+  logout_after = JSON.parse(File.read(File.join(logout_trace, "after-snapshot.json")))
+  logout_status = logout_after.fetch("nodes").values.find { |node| node["testID"] == "tv.example.status" }
+  abort "expected logout trace after snapshot" unless logout_status && logout_status["text"] == "Logged out"
+
   focused_after_down = focus_snapshot.fetch("nodes").values.select { |node| node.dig("uiKit", "isFocused") == true }
   abort "expected tv.example.secondary focused after press down, got #{focused_after_down.map { |node| node["testID"] || node["typeName"] }.inspect}" unless focused_after_down.any? { |node| node["testID"] == "tv.example.secondary" }
 
@@ -238,6 +300,11 @@ ruby -rjson -e '
   abort "expected tvOS GET method" unless event["method"] == "GET"
   abort "expected tvOS network metadata" unless event.dig("metadata", "screen", "value") == "workbench"
   abort "expected tvOS response body" unless event["responseBody"]&.include?("tvOS")
+  feed_event = network.find { |entry| entry["url"] == "https://api.example.test/tvos/feed" }
+  abort "missing empty feed network fixture" unless feed_event
+  abort "expected empty feed 204" unless feed_event["statusCode"] == 204
+  abort "expected empty feed metadata" unless feed_event.dig("metadata", "empty", "value") == true
+  abort "expected empty feed response body" unless feed_event["responseBody"]&.include?("\"items\":[]")
 
   refs = JSON.parse(File.read(ARGV.fetch(11)))
   abort "missing tvOS reference evidence" unless refs.any? { |entry| entry["owner"] == "TVWorkbenchController" && entry["target"] == "DeviceActuationService" }
@@ -248,8 +315,17 @@ ruby -rjson -e '
   flag_set = JSON.parse(File.read(ARGV.fetch(8)))
   abort "expected tv-new-nav=true after set" unless flag_set.dig("after", "value") == true
 
+  flag_disabled = JSON.parse(File.read(ARGV.fetch(26)))
+  abort "expected tv-new-nav=false after disable" unless flag_disabled.dig("after", "value") == false
+
+  empty_flag = JSON.parse(File.read(ARGV.fetch(27)))
+  abort "expected tv-empty-feed=true" unless empty_flag.dig("value", "value") == true
+
   keychain = JSON.parse(File.read(ARGV.fetch(12)))
   abort "missing tvOS keychain fixture metadata" unless keychain.any? { |entry| entry["service"] == "dev.loupe.tvos-example" && entry["account"] == "fixture" }
+
+  keychain_after_logout = JSON.parse(File.read(ARGV.fetch(28)))
+  abort "expected logout to clear tvOS keychain fixture" if keychain_after_logout.any? { |entry| entry["service"] == "dev.loupe.tvos-example" && entry["account"] == "fixture" }
 
   hit = JSON.parse(File.read(ARGV.fetch(13)))
   abort "expected tvOS hit-test evidence" unless hit["hitRef"] && hit["hitTypeName"]
@@ -265,7 +341,9 @@ ruby -rjson -e '
   target_ids = ["tv.example.title", "tv.example.status", "tv.example.refresh"]
   bad_contrast = audit.fetch("issues").select { |issue| issue["kind"] == "lowTextContrast" && target_ids.include?(issue["testID"]) }
   abort "unexpected tvOS dark contrast issues: #{bad_contrast.inspect}" unless bad_contrast.empty?
-' "$RUNTIME_PATH" "$SNAPSHOT_PATH" "$QUERY_PATH" "$INSPECT_ROOT_PATH" "$INSPECT_LIST_PATH" "$LOGS_PATH" "$NETWORK_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$ENV_PATH" "$DEVICE" "$REFS_PATH" "$KEYCHAIN_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$AUDIT_PATH" "$FOCUS_SNAPSHOT_PATH" "$PRESS_LOGS_PATH" "$PRESS_SELECT_TRACE_DIR" "$PRESS_DOWN_TRACE_DIR"
+  bad_sentinel = audit.fetch("issues").select { |issue| issue["kind"] == "lowTextContrast" && issue["testID"] == "tv.example.dark.badContrast" }
+  abort "expected dark contrast sentinel issue" if bad_sentinel.empty?
+' "$RUNTIME_PATH" "$SNAPSHOT_PATH" "$QUERY_PATH" "$INSPECT_ROOT_PATH" "$INSPECT_LIST_PATH" "$LOGS_PATH" "$NETWORK_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$ENV_PATH" "$DEVICE" "$REFS_PATH" "$KEYCHAIN_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$AUDIT_PATH" "$FOCUS_SNAPSHOT_PATH" "$PRESS_LOGS_PATH" "$PRESS_SELECT_TRACE_DIR" "$PRESS_DOWN_TRACE_DIR" "$ACCESSIBILITY_PATH" "$INSPECT_EMPTY_PATH" "$LEGACY_LOGS_PATH" "$LOGOUT_LOGS_PATH" "$PRESS_LEGACY_TRACE_DIR" "$PRESS_LOGOUT_TRACE_DIR" "$FLAG_DISABLED_PATH" "$EMPTY_FLAG_PATH" "$KEYCHAIN_AFTER_LOGOUT_PATH"
 
 echo "tvOS example E2E passed"
 echo "snapshot: $SNAPSHOT_PATH"

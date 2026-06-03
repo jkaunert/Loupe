@@ -1,14 +1,14 @@
 ---
 name: loupe
-description: Use this skill when working with iOS Simulator UI automation, Loupe runtime injection, view-tree inspection, accessibility tree querying, compact screen context, or Loupe CLI-driven simulator actions.
+description: Use this skill when working with Loupe Apple-platform runtime automation, simulator injection, linked LoupeKit runtimes, view-tree inspection, accessibility tree querying, compact screen context, or Loupe CLI-driven platform actions.
 ---
 
 # Loupe
 
-Use Loupe for iOS Simulator observation, CLI actions, mutation probes, and
-design QA. Keep full snapshots on disk during the task, send compact output to
-agents, and delete artifacts after use unless they are evidence, failure traces,
-or part of a before/after comparison.
+Use Loupe for Apple-platform runtime observation, diagnostics, CLI actions,
+mutation probes, and design QA. Keep full snapshots on disk during the task,
+send compact output to agents, and delete artifacts after use unless they are
+evidence, failure traces, or part of a before/after comparison.
 
 ## Rules
 
@@ -17,8 +17,9 @@ or part of a before/after comparison.
 - Use accessibility for text discovery and action targets. Use the view tree for
   layout, style, UIKit properties, mutation refs, and visual checks.
 - Drive runtime E2E with Loupe CLI actions, not XCTest as the public harness.
-- Public actions are `tap`, `swipe`, `drag`, and `type`; prefer `testID`, `ref`,
-  or coordinates over tap-by-text. `pinch` is not implemented.
+- Public simulator actions are `tap`, `swipe`, `drag`, `type`, and tvOS
+  `press`; prefer `testID`, `ref`, or coordinates over tap-by-text. `pinch` is
+  not implemented.
 - Artifacts are temporary. Use task-specific `/tmp` paths, clear old paths first,
   and manually remove explicit `capture-report` or `--trace-dir` directories.
   `loupe cleanup` only prunes stale runtime records and old automatic traces.
@@ -35,11 +36,14 @@ loupe use --host <runtime-host>
 loupe current
 ```
 
-Observation commands can use `--bundle-id` or `--host`. Action commands do not
-accept `--bundle-id`; run `loupe use <bundle-id> --udid <sim-udid>` first, or
-pass `--host <runtime-host> --udid <sim-udid>`. If multiple simulators are
-booted, do not use `--udid booted`; use the UDID from `loupe current` or
-`loupe runtimes`.
+For linked runtimes such as macOS examples, start the app normally and pass the
+runtime `--host`.
+
+Observation commands can use `--bundle-id` or `--host`. Simulator action
+commands do not accept `--bundle-id`; run
+`loupe use <bundle-id> --udid <sim-udid>` first, or pass
+`--host <runtime-host> --udid <sim-udid>`. If multiple simulators are booted, do
+not use `--udid booted`; use the UDID from `loupe current` or `loupe runtimes`.
 
 ## Observe
 
@@ -96,12 +100,13 @@ loupe tap --test-id checkout.payButton --host <runtime-host> --udid <sim-udid> -
 loupe tap --snapshot "$REPORT/snapshot.json" --ref n21 --udid <sim-udid>
 loupe tap --x 201 --y 274 --udid <sim-udid> --width 438 --height 954
 loupe swipe --from 219,760 --to 219,190 --host <runtime-host> --udid <sim-udid> --width 438 --height 954 --trace-dir "$TRACE"
+loupe press select --host <runtime-host> --udid <tvos-sim-udid> --trace-dir "$TRACE"
 loupe trace-summary "$TRACE"
 loupe diff "$TRACE/before-snapshot.json" "$TRACE/after-snapshot.json" --changed-only
 ```
 
-Also use `drag`, `type`, and `explore-routes` when needed. Treat scroll with no
-offset or visible-frame change as failed unless `--no-verify-scroll` is
+Also use `drag`, `type`, `press`, and `explore-routes` when needed. Treat scroll
+with no offset or visible-frame change as failed unless `--no-verify-scroll` is
 intentional. Preserve failed trace paths until summarized or handed back. Remove
 successful trace dirs unless a later diff/audit needs them. Action traces use
 `before-snapshot.json`/`after-snapshot.json`; `set-many --trace-dir` uses

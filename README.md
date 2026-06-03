@@ -108,6 +108,14 @@ the platform backend supports them. iOS Simulator also verifies native HID scrol
 profiling; macOS currently uses runtime observation/state evidence rather than a
 host HID action backend.
 
+Run the platform examples directly when checking this support:
+
+```bash
+scripts/verify-platform-builds.sh
+Examples/MacLoupeExample/run-macos-e2e.sh
+Examples/LoupeTVExample/run-tvos-runtime-e2e.sh
+```
+
 ## How Loupe Differs From Xcode MCP Tooling
 
 [Apple's Xcode MCP bridge](https://developer.apple.com/documentation/xcode/giving-external-agents-access-to-xcode)
