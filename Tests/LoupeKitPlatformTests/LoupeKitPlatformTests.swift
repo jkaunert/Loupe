@@ -260,7 +260,7 @@ import SwiftUI
 #endif
 
 #if canImport(AppKit) && !canImport(UIKit)
-@Suite struct LoupeAgentAppKitTests {
+@Suite(.serialized) struct LoupeAgentAppKitTests {
     @MainActor
     @Test func appKitSnapshotCapturesWindowTestIDMetadataAndDiagnostics() throws {
         let fixture = AppKitFixture()
