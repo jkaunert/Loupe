@@ -9,6 +9,7 @@ fi
 NAME="$1"
 shift
 TAIL_LINES="${LOUPE_CI_TAIL_LINES:-120}"
+SUMMARY_BYTES="${LOUPE_CI_SUMMARY_BYTES:-1800}"
 DIAGNOSTIC_GLOBS="${LOUPE_CI_DIAGNOSTICS:-/tmp/loupe-*}"
 OUTPUT_LOG="/tmp/loupe-ci-${NAME//[^[:alnum:]._-]/-}.log"
 
@@ -22,10 +23,11 @@ if [[ "$STATUS" -eq 0 ]]; then
 fi
 
 SUMMARY="$(
-  tail -n 20 "$OUTPUT_LOG" 2>/dev/null \
+  tail -n 80 "$OUTPUT_LOG" 2>/dev/null \
+    | tail -c "$SUMMARY_BYTES" \
     | tr '\n' ' ' \
     | sed 's/%/%25/g; s/\r/%0D/g' \
-    | cut -c 1-900
+    | cut -c 1-"$SUMMARY_BYTES"
 )"
 if [[ -z "$SUMMARY" ]]; then
   SUMMARY="Command exited with status ${STATUS}"
