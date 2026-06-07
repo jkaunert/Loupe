@@ -1,11 +1,12 @@
 # Loupe Architecture Notes
 
-Loupe is an iOS Simulator harness for runtime observation, simulator-visible
-input, and fast UI iteration.
+Loupe is an Apple-platform runtime harness for observation, platform-visible
+input where available, diagnostics, and fast UI iteration.
 
 ## Goals
 
-- Capture high-fidelity UIKit and accessibility state from inside the app.
+- Capture high-fidelity UIKit/AppKit and accessibility state from inside the
+  app.
 - Give agents compact context by default and full snapshots on demand.
 - Resolve stable selectors for inspection and action.
 - Execute real simulator input without making XCTest the public harness.
@@ -21,14 +22,15 @@ fixtures.
 
 ```text
 loupe CLI
-  - launches and injects apps
+  - launches and injects simulator apps where injection is supported
+  - talks to linked Loupe runtime servers where direct injection is unavailable
   - records runtime host mappings
   - stores snapshots, reports, screenshots, logs, and traces
   - resolves selectors and dispatches host-side simulator input
 
 LoupeKit / LoupeInjection
-  - runs inside the simulator app
-  - captures view, accessibility, UIKit, layout, style, and metadata state
+  - runs inside the app process
+  - captures view, accessibility, UIKit/AppKit, layout, style, and metadata state
   - exposes localhost runtime endpoints
   - applies allowlisted UIKit mutation experiments on the app main thread
 
@@ -37,8 +39,8 @@ LoupeCore
     compact observations, and design comparison
 ```
 
-Homebrew installs both the CLI and `LoupeInjector.framework`; `loupe start`
-resolves the injector path automatically.
+Homebrew installs both the CLI and `LoupeInjector.framework`; `loupe app launch`
+resolves the injector path automatically for simulator injection workflows.
 
 ## Runtime Selection
 
@@ -49,14 +51,14 @@ around a fixed default port.
 Use stable identity first:
 
 ```bash
-loupe runtimes
-loupe use com.example.App
-loupe current
-loupe capture-report --bundle-id com.example.App --output loupe-report
+loupe app list
+loupe app use com.example.App
+loupe app current
+loupe ui report --bundle-id com.example.App --output loupe-report
 ```
 
-Use `--host <runtime-host>` only when it comes from `loupe runtimes` or
-`loupe current`.
+Use `--host <runtime-host>` only when it comes from `loupe app list` or
+`loupe app current`.
 
 ## Observation Policy
 
@@ -64,13 +66,13 @@ Do not put the whole tree into LLM context by default.
 
 Default agent context should come from:
 
-- `compact`
-- `tree --accessibility`
-- `tree --view`
-- `screen-map`
-- targeted `inspect`
-- `trace-summary`
-- `diff --changed-only`
+- `ui compact`
+- `ui tree --accessibility`
+- `ui tree --view`
+- `ui screen`
+- targeted `ui node`
+- `debug trace summary`
+- `debug trace diff --changed-only`
 
 Use accessibility for movement/input selectors and text discovery. Use the view
 tree for layout, style, UIKit properties, mutation refs, and design checks.
@@ -84,14 +86,14 @@ visible input through the simulator.
 Target flow:
 
 ```text
-loupe tap --test-id checkout.payButton --trace-dir /tmp/loupe-trace
+loupe act tap --test-id checkout.payButton --trace-dir /tmp/loupe-trace
   -> fetch runtime accessibility/snapshot state
   -> resolve target and coordinates
   -> dispatch native simulator input
   -> capture after state, screenshot, logs, and diff
 ```
 
-`tap`, `swipe`, `drag`, and `type` are implemented. `pinch` remains planned.
+`tap`, `swipe`, `drag`, `type`, and tvOS `press` are implemented.
 Tap-by-text is intentionally not the public contract because visible text is
 ambiguous; prefer `testID`, `ref`, or coordinates.
 
@@ -102,11 +104,11 @@ requested value. Support is allowlisted, not arbitrary Objective-C selector
 execution.
 
 ```bash
-loupe mutations --test-id checkout.card
-loupe set --test-id checkout.title text "New title" --output /tmp/loupe-set.json
-loupe set --test-id checkout.card backgroundColor --color '#ff3366'
-loupe set --test-id checkout.card frame --rect 20,120,220,80 --no-animate
-loupe reflect /tmp/loupe-set.json --source ./Sources
+loupe ui mutations
+loupe ui set --test-id checkout.title text "New title" --output /tmp/loupe-set.json
+loupe ui set --test-id checkout.card backgroundColor --color '#ff3366'
+loupe ui set --test-id checkout.card frame --rect 20,120,220,80 --no-animate
+loupe ui reflect /tmp/loupe-set.json --source ./Sources
 ```
 
 Supported families include view, layer, accessibility, text, control, scroll,
@@ -116,10 +118,10 @@ constraint edits are useful probes, but UIKit owners may restore them during a
 layout pass. Mutation responses include requested and effective state so those
 reversions are visible.
 
-## Design Verification
+## Runtime UI Verification
 
-Design implementation is considered successful only when runtime evidence
-supports it:
+UI implementation is considered successful only when runtime evidence supports
+it. Design comparison is one optional workflow in that loop:
 
 - screen size matches the intended simulator
 - fixed chrome does not scroll with content
@@ -133,9 +135,8 @@ Use `Docs/FigmaComparison.md` for optional exported-design fixture comparison.
 
 ## Planned Work
 
-1. Implement native HID pinch.
-2. Add screenshot baseline diffing.
-3. Expand layout/style assertions for spacing, typography, alignment, clipping,
+1. Add screenshot baseline diffing.
+2. Expand layout/style assertions for spacing, typography, alignment, clipping,
    and z-order intent.
 4. Improve selector scoring for ambiguous accessibility and view-tree matches.
 5. Continue refining the Loupe skill with measured agent A/B loops.

@@ -1,4 +1,5 @@
 import SwiftUI
+import Security
 import UIKit
 import WebKit
 
@@ -122,6 +123,30 @@ final class ViewController: UITableViewController {
                 ]
             ]
         )
+        NotificationCenter.default.post(
+            name: Notification.Name("dev.loupe.network"),
+            object: nil,
+            userInfo: [
+                "method": "GET",
+                "url": "https://api.example.test/customers",
+                "statusCode": 200,
+                "responseBody": #"{"items":[{"id":1,"name":"Customer 1"}]}"#,
+                "metadata": ["screen": "customers"]
+            ]
+        )
+        NotificationCenter.default.post(
+            name: Notification.Name("dev.loupe.reference"),
+            object: nil,
+            userInfo: [
+                "owner": "CustomerListViewController",
+                "target": "DeviceActuationService",
+                "kind": "strong",
+                "label": "fixture service reference",
+                "metadata": ["screen": "customers"]
+            ]
+        )
+        UserDefaults.standard.set(false, forKey: "new-nav")
+        upsertLoupeKeychainFixture()
     }
 
     override func numberOfSections(in tableView: UITableView) -> Int {
@@ -237,7 +262,12 @@ final class ExampleCell: UITableViewCell {
         subtitleLabel.textColor = .secondaryLabel
         badgeLabel.font = .preferredFont(forTextStyle: .caption1)
         badgeLabel.textAlignment = .center
-        badgeLabel.backgroundColor = .tertiarySystemFill
+        badgeLabel.textColor = .label
+        badgeLabel.backgroundColor = UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(white: 0.16, alpha: 1)
+                : UIColor(white: 0.92, alpha: 1)
+        }
         badgeLabel.layer.cornerRadius = 6
         badgeLabel.layer.masksToBounds = true
 
@@ -517,6 +547,14 @@ final class ComponentsViewController: UIViewController {
         layout.minimumLineSpacing = 8
         return UICollectionView(frame: .zero, collectionViewLayout: layout)
     }()
+    private lazy var selfSizingCollectionView: UICollectionView = {
+        let layout = UICollectionViewFlowLayout()
+        layout.scrollDirection = .horizontal
+        layout.estimatedItemSize = CGSize(width: 96, height: 44)
+        layout.minimumInteritemSpacing = 8
+        layout.minimumLineSpacing = 8
+        return UICollectionView(frame: .zero, collectionViewLayout: layout)
+    }()
     private let pickerView = UIPickerView()
     private let pageControl = UIPageControl()
     private let progressView = UIProgressView(progressViewStyle: .default)
@@ -527,6 +565,7 @@ final class ComponentsViewController: UIViewController {
     private let primaryButton = UIButton(type: .system)
     private let designCard = UIView()
     private let componentTiles = ["Label", "Image", "Control", "Input", "List"]
+    private let selfSizingTiles = ["Short", "Adaptive title", "Wide"]
     private let pickerRows = ["North", "South", "West"]
     private var didSendLoupeComponentLog = false
 
@@ -638,6 +677,13 @@ final class ComponentsViewController: UIViewController {
         collectionView.register(ComponentTileCell.self, forCellWithReuseIdentifier: ComponentTileCell.reuseIdentifier)
         collectionView.accessibilityIdentifier = "example.components.collectionView"
 
+        selfSizingCollectionView.dataSource = self
+        selfSizingCollectionView.delegate = self
+        selfSizingCollectionView.backgroundColor = .secondarySystemBackground
+        selfSizingCollectionView.layer.cornerRadius = 8
+        selfSizingCollectionView.register(ComponentTileCell.self, forCellWithReuseIdentifier: ComponentTileCell.reuseIdentifier)
+        selfSizingCollectionView.accessibilityIdentifier = "example.components.selfSizingCollectionView"
+
         pickerView.dataSource = self
         pickerView.delegate = self
         pickerView.selectRow(1, inComponent: 0, animated: false)
@@ -720,6 +766,7 @@ final class ComponentsViewController: UIViewController {
             dateRow,
             tabBar,
             collectionView,
+            selfSizingCollectionView,
             pickerView,
             pageControl,
             progressRow,
@@ -748,6 +795,7 @@ final class ComponentsViewController: UIViewController {
             symbolImageView.heightAnchor.constraint(equalToConstant: 36),
             tabBar.heightAnchor.constraint(equalToConstant: 52),
             collectionView.heightAnchor.constraint(equalToConstant: 72),
+            selfSizingCollectionView.heightAnchor.constraint(equalToConstant: 72),
             pickerView.heightAnchor.constraint(equalToConstant: 120),
             noteView.heightAnchor.constraint(equalToConstant: 96),
             alertButton.heightAnchor.constraint(equalToConstant: 44),
@@ -793,7 +841,10 @@ final class ComponentsViewController: UIViewController {
 
 extension ComponentsViewController: UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        componentTiles.count
+        if collectionView === selfSizingCollectionView {
+            return selfSizingTiles.count
+        }
+        return componentTiles.count
     }
 
     func collectionView(
@@ -804,7 +855,15 @@ extension ComponentsViewController: UICollectionViewDataSource, UICollectionView
             withReuseIdentifier: ComponentTileCell.reuseIdentifier,
             for: indexPath
         ) as! ComponentTileCell
-        cell.configure(text: componentTiles[indexPath.item], index: indexPath.item)
+        if collectionView === selfSizingCollectionView {
+            cell.configure(
+                text: selfSizingTiles[indexPath.item],
+                index: indexPath.item,
+                idPrefix: "example.components.selfSizingCollection"
+            )
+        } else {
+            cell.configure(text: componentTiles[indexPath.item], index: indexPath.item)
+        }
         return cell
     }
 }
@@ -841,10 +900,10 @@ final class ComponentTileCell: UICollectionViewCell {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func configure(text: String, index: Int) {
+    func configure(text: String, index: Int, idPrefix: String = "example.components.collection") {
         titleLabel.text = text
-        accessibilityIdentifier = "example.components.collection.\(index)"
-        titleLabel.accessibilityIdentifier = "example.components.collection.\(index).label"
+        accessibilityIdentifier = "\(idPrefix).\(index)"
+        titleLabel.accessibilityIdentifier = "\(idPrefix).\(index).label"
     }
 
     private func configure() {
@@ -861,6 +920,8 @@ final class ComponentTileCell: UICollectionViewCell {
         NSLayoutConstraint.activate([
             titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
             titleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
+            titleLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
+            titleLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
             titleLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
         ])
     }
@@ -956,6 +1017,36 @@ struct SwiftUIFixtureView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(.systemBackground))
         .accessibilityIdentifier("example.fixtures.swiftui")
+        .localLoupeProbe("example.fixtures.swiftui.probe", label: "iOS SwiftUI probe")
+    }
+}
+
+private extension View {
+    func localLoupeProbe(_ id: String, label: String? = nil) -> some View {
+        background {
+            LoupeFallbackProbeView(id: id, label: label)
+        }
+    }
+}
+
+private struct LoupeFallbackProbeView: UIViewRepresentable {
+    let id: String
+    let label: String?
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.accessibilityIdentifier = id
+        view.isAccessibilityElement = true
+        view.accessibilityLabel = label ?? id
+        view.backgroundColor = .clear
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        uiView.accessibilityIdentifier = id
+        uiView.isAccessibilityElement = true
+        uiView.accessibilityLabel = label ?? id
+        uiView.backgroundColor = .clear
     }
 }
 
@@ -1276,5 +1367,22 @@ extension FormViewController: UITextFieldDelegate {
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
         textField.resignFirstResponder()
         return true
+    }
+}
+
+private func upsertLoupeKeychainFixture() {
+    let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: "dev.loupe.example",
+        kSecAttrAccount as String: "fixture",
+    ]
+    let attributes: [String: Any] = [
+        kSecValueData as String: Data("fixture-token".utf8),
+    ]
+    let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+    if status == errSecItemNotFound {
+        var item = query
+        item[kSecValueData as String] = Data("fixture-token".utf8)
+        SecItemAdd(item as CFDictionary, nil)
     }
 }

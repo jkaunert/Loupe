@@ -473,9 +473,9 @@ struct LayoutAuditTests {
         #expect(!audit.issues.contains { $0.kind == .overlappingSiblings })
     }
 
-    @Test func auditIgnoresScrollContentAndPrivateChromeContainmentNoise() {
+    @Test func auditIgnoresHiddenDuplicateTestIDs() {
         let snapshot = LoupeSnapshot(
-            id: "layout-scroll-private",
+            id: "layout-hidden-duplicates",
             capturedAt: Date(timeIntervalSince1970: 0),
             screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
             rootRefs: ["root"],
@@ -489,133 +489,184 @@ struct LayoutAuditTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: false,
-                    children: ["table", "nav", "animation-parent"]
+                    children: ["visible", "hidden-a", "hidden-b"]
                 ),
-                "table": LoupeNode(
-                    ref: "table",
+                "visible": LoupeNode(
+                    ref: "visible",
                     parentRef: "root",
                     kind: .view,
-                    typeName: "UITableView",
-                    role: "tableView",
-                    frame: LoupeRect(x: 0, y: 100, width: 390, height: 400),
+                    typeName: "UIView",
+                    testID: "settings.row",
+                    frame: LoupeRect(x: 20, y: 20, width: 120, height: 44),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false
+                ),
+                "hidden-a": LoupeNode(
+                    ref: "hidden-a",
+                    parentRef: "root",
+                    kind: .view,
+                    typeName: "UIView",
+                    testID: "hidden.row",
+                    frame: LoupeRect(x: 20, y: 80, width: 120, height: 44),
+                    isVisible: false,
+                    isEnabled: true,
+                    isInteractive: false
+                ),
+                "hidden-b": LoupeNode(
+                    ref: "hidden-b",
+                    parentRef: "root",
+                    kind: .view,
+                    typeName: "UIView",
+                    testID: "hidden.row",
+                    frame: LoupeRect(x: 20, y: 140, width: 120, height: 44),
+                    isVisible: false,
+                    isEnabled: true,
+                    isInteractive: false
+                ),
+            ]
+        )
+
+        let audit = LoupeLayoutAuditor.audit(snapshot)
+
+        #expect(!audit.issues.contains { $0.kind == .duplicateTestID && $0.testID == "hidden.row" })
+    }
+
+    @Test func auditIgnoresVisibleButOffscreenNodes() {
+        let snapshot = LoupeSnapshot(
+            id: "layout-offscreen-visible",
+            capturedAt: Date(timeIntervalSince1970: 0),
+            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
+            rootRefs: ["root"],
+            nodes: [
+                "root": LoupeNode(
+                    ref: "root",
+                    parentRef: nil,
+                    kind: .view,
+                    typeName: "UIView",
+                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    children: ["onscreen-small", "dismissed-button"]
+                ),
+                "onscreen-small": button(
+                    ref: "onscreen-small",
+                    testID: "visible.small",
+                    frame: LoupeRect(x: 20, y: 20, width: 30, height: 30)
+                ),
+                "dismissed-button": button(
+                    ref: "dismissed-button",
+                    testID: nil,
+                    frame: LoupeRect(x: 300, y: 888, width: 77, height: 31)
+                ),
+            ]
+        )
+
+        let audit = LoupeLayoutAuditor.audit(snapshot)
+
+        #expect(audit.issues.contains { $0.kind == .smallInteractiveTarget && $0.ref == "onscreen-small" })
+        #expect(!audit.issues.contains { $0.ref == "dismissed-button" })
+    }
+
+    @Test func auditIgnoresSyntheticAndSystemTabBarSmallTargetNoise() {
+        let snapshot = LoupeSnapshot(
+            id: "layout-tabbar-noise",
+            capturedAt: Date(timeIntervalSince1970: 0),
+            screen: LoupeScreen(size: LoupeSize(width: 1920, height: 1080), scale: 2),
+            rootRefs: ["root"],
+            nodes: [
+                "root": LoupeNode(
+                    ref: "root",
+                    parentRef: nil,
+                    kind: .view,
+                    typeName: "UIView",
+                    frame: LoupeRect(x: 0, y: 0, width: 1920, height: 1080),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    children: ["tab-button", "synthetic-tab-item", "app-button"]
+                ),
+                "tab-button": tabBarButton(ref: "tab-button"),
+                "synthetic-tab-item": tabBarButton(
+                    ref: "synthetic-tab-item",
+                    typeName: "UITabBarItem",
+                    role: "button",
+                    text: "Latest",
+                    custom: ["synthetic": .bool(true), "source": .string("UITabBarItem")]
+                ),
+                "app-button": button(
+                    ref: "app-button",
+                    testID: "app.small",
+                    frame: LoupeRect(x: 100, y: 200, width: 30, height: 30)
+                ),
+            ]
+        )
+
+        let audit = LoupeLayoutAuditor.audit(snapshot)
+
+        #expect(audit.issues.contains { $0.kind == .smallInteractiveTarget && $0.testID == "app.small" })
+        #expect(!audit.issues.contains { $0.kind == .smallInteractiveTarget && $0.ref == "tab-button" })
+        #expect(!audit.issues.contains { $0.kind == .smallInteractiveTarget && $0.ref == "synthetic-tab-item" })
+    }
+
+    @Test func auditIgnoresSystemTabBarItemOverlapNoise() {
+        let snapshot = LoupeSnapshot(
+            id: "layout-tabbar-overlap-noise",
+            capturedAt: Date(timeIntervalSince1970: 0),
+            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
+            rootRefs: ["root"],
+            nodes: [
+                "root": LoupeNode(
+                    ref: "root",
+                    parentRef: nil,
+                    kind: .view,
+                    typeName: "UITabBar",
+                    role: "tabBar",
+                    frame: LoupeRect(x: 0, y: 760, width: 390, height: 84),
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: true,
-                    children: ["partly-visible-cell"]
+                    children: ["home", "discover", "app-a", "app-b"]
                 ),
-                "partly-visible-cell": LoupeNode(
-                    ref: "partly-visible-cell",
-                    parentRef: "table",
-                    kind: .view,
-                    typeName: "UITableViewCell",
-                    frame: LoupeRect(x: 0, y: 470, width: 390, height: 80),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: true
+                "home": tabBarButton(
+                    ref: "home",
+                    typeName: "UITabBarItem",
+                    role: "button",
+                    text: "Home",
+                    frame: LoupeRect(x: 20, y: 776, width: 95, height: 54),
+                    custom: ["synthetic": .bool(true), "source": .string("UITabBarItem")]
                 ),
-                "nav": LoupeNode(
-                    ref: "nav",
-                    parentRef: "root",
-                    kind: .view,
-                    typeName: "UINavigationBar",
-                    role: "navigationBar",
-                    frame: LoupeRect(x: 0, y: 44, width: 390, height: 54),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["bar-background"]
+                "discover": tabBarButton(
+                    ref: "discover",
+                    typeName: "UITabBarItem",
+                    role: "button",
+                    text: "Discover",
+                    frame: LoupeRect(x: 106, y: 776, width: 95, height: 54),
+                    custom: ["synthetic": .bool(true), "source": .string("UITabBarItem")]
                 ),
-                "bar-background": privateUIKitControl(
-                    ref: "bar-background",
-                    typeName: "_UIBarBackground",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 98),
-                    parentRef: "nav",
-                    role: nil,
-                    isInteractive: false
+                "app-a": button(
+                    ref: "app-a",
+                    testID: "app.a",
+                    frame: LoupeRect(x: 40, y: 40, width: 80, height: 44)
                 ),
-                "animation-parent": LoupeNode(
-                    ref: "animation-parent",
-                    parentRef: "root",
-                    kind: .view,
-                    typeName: "AnimationView",
-                    frame: LoupeRect(x: 212.33, y: 62, width: 173.67, height: 44),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-                    children: ["animation-child"]
-                ),
-                "animation-child": LoupeNode(
-                    ref: "animation-child",
-                    parentRef: "animation-parent",
-                    kind: .view,
-                    typeName: "AnimationView",
-                    frame: LoupeRect(x: 204.05, y: 59.9, width: 190.24, height: 48.2),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore")
+                "app-b": button(
+                    ref: "app-b",
+                    testID: "app.b",
+                    frame: LoupeRect(x: 80, y: 40, width: 80, height: 44)
                 ),
             ]
         )
 
         let audit = LoupeLayoutAuditor.audit(snapshot)
 
-        #expect(!audit.issues.contains { $0.kind == .childOutsideParent && $0.ref == "partly-visible-cell" })
-        #expect(!audit.issues.contains { $0.kind == .childOutsideParent && $0.ref == "bar-background" })
-        #expect(!audit.issues.contains { $0.kind == .childOutsideParent && $0.ref == "animation-child" })
+        #expect(!audit.issues.contains { $0.kind == .overlappingSiblings && $0.ref == "home" })
+        #expect(audit.issues.contains { $0.kind == .overlappingSiblings && $0.ref == "app-a" })
     }
 
-    @Test func auditIgnoresMinorContainmentOverhang() {
+    @Test func auditIgnoresScrollContainerAndTextFieldPlaceholderNoise() {
         let snapshot = LoupeSnapshot(
-            id: "layout-minor-overhang",
-            capturedAt: Date(timeIntervalSince1970: 0),
-            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
-            rootRefs: ["root"],
-            nodes: [
-                "root": LoupeNode(
-                    ref: "root",
-                    parentRef: nil,
-                    kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["parent"]
-                ),
-                "parent": LoupeNode(
-                    ref: "parent",
-                    parentRef: "root",
-                    kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 10, y: 72, width: 320, height: 82.33),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["child"]
-                ),
-                "child": LoupeNode(
-                    ref: "child",
-                    parentRef: "parent",
-                    kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 10, y: 72, width: 333, height: 82.67),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false
-                ),
-            ]
-        )
-
-        let audit = LoupeLayoutAuditor.audit(snapshot)
-
-        #expect(!audit.issues.contains { $0.kind == .childOutsideParent && $0.ref == "child" })
-    }
-
-    @Test func auditIgnoresOffscreenVisibleTextAndContainmentNoise() {
-        let snapshot = LoupeSnapshot(
-            id: "layout-offscreen-text",
+            id: "layout-search-noise",
             capturedAt: Date(timeIntervalSince1970: 0),
             screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
             rootRefs: ["root"],
@@ -630,685 +681,227 @@ struct LayoutAuditTests {
                     isEnabled: true,
                     isInteractive: false,
                     style: LoupeStyle(backgroundColor: LoupeColor(red: 1, green: 1, blue: 1, alpha: 1)),
-                    children: ["cell"]
+                    children: [
+                        "thin-scroll",
+                        "search-field",
+                        "scope-control",
+                        "text-canvas",
+                        "low-contrast-title",
+                    ]
                 ),
-                "cell": LoupeNode(
-                    ref: "cell",
+                "thin-scroll": LoupeNode(
+                    ref: "thin-scroll",
                     parentRef: "root",
                     kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 8, y: 80, width: 360, height: 120),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: true,
-                    children: ["offscreen-time"]
-                ),
-                "offscreen-time": LoupeNode(
-                    ref: "offscreen-time",
-                    parentRef: "cell",
-                    kind: .view,
-                    typeName: "InsetLabel",
-                    text: "Fri, 12 Jun, 6:32 PM",
-                    frame: LoupeRect(x: 390, y: 120, width: 120, height: 12),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    style: LoupeStyle(
-                        backgroundColor: LoupeColor(red: 0, green: 0, blue: 0, alpha: 0),
-                        textColor: LoupeColor(red: 0.56, green: 0.56, blue: 0.56, alpha: 1)
-                    )
-                ),
-            ]
-        )
-
-        let audit = LoupeLayoutAuditor.audit(snapshot)
-
-        #expect(!audit.issues.contains { $0.ref == "offscreen-time" })
-    }
-
-    @Test func auditClipsContainmentChecksToTheScreenBounds() {
-        let snapshot = LoupeSnapshot(
-            id: "layout-screen-clipped-containment",
-            capturedAt: Date(timeIntervalSince1970: 0),
-            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
-            rootRefs: ["root"],
-            nodes: [
-                "root": LoupeNode(
-                    ref: "root",
-                    parentRef: nil,
-                    kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["input-bar"]
-                ),
-                "input-bar": LoupeNode(
-                    ref: "input-bar",
-                    parentRef: "root",
-                    kind: .view,
-                    typeName: "InputBarAccessoryView",
-                    frame: LoupeRect(x: 0, y: 800, width: 390, height: 44),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["input-content"]
-                ),
-                "input-content": LoupeNode(
-                    ref: "input-content",
-                    parentRef: "input-bar",
-                    kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 0, y: 800, width: 390, height: 90),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false
-                ),
-            ]
-        )
-
-        let audit = LoupeLayoutAuditor.audit(snapshot)
-
-        #expect(!audit.issues.contains { $0.kind == .childOutsideParent && $0.ref == "input-content" })
-    }
-
-    @Test func auditIgnoresMinorSiblingOverlapAndScrollTargetSizeNoise() {
-        let snapshot = LoupeSnapshot(
-            id: "layout-minor-overlap-scroll",
-            capturedAt: Date(timeIntervalSince1970: 0),
-            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
-            rootRefs: ["root"],
-            nodes: [
-                "root": LoupeNode(
-                    ref: "root",
-                    parentRef: nil,
-                    kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["first", "second", "language-strip"]
-                ),
-                "first": button(ref: "first", testID: "first", frame: LoupeRect(x: 10, y: 20, width: 74, height: 54)),
-                "second": button(ref: "second", testID: "second", frame: LoupeRect(x: 77, y: 20, width: 74, height: 54)),
-                "language-strip": LoupeNode(
-                    ref: "language-strip",
-                    parentRef: "root",
-                    kind: .view,
-                    typeName: "UIScrollView",
+                    typeName: "HostingScrollView",
                     role: "scrollView",
-                    frame: LoupeRect(x: 0, y: 90, width: 329, height: 38),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: true
-                ),
-            ]
-        )
-
-        let audit = LoupeLayoutAuditor.audit(snapshot)
-
-        #expect(!audit.issues.contains { $0.kind == .overlappingSiblings && $0.ref == "first" })
-        #expect(!audit.issues.contains { $0.kind == .smallInteractiveTarget && $0.ref == "language-strip" })
-    }
-
-    @Test func auditDoesNotUseWindowBackgroundForContrast() {
-        let snapshot = LoupeSnapshot(
-            id: "layout-window-background",
-            capturedAt: Date(timeIntervalSince1970: 0),
-            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
-            rootRefs: ["app"],
-            nodes: [
-                "app": LoupeNode(
-                    ref: "app",
-                    parentRef: nil,
-                    kind: .application,
-                    typeName: "UIApplication",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["window"]
-                ),
-                "window": LoupeNode(
-                    ref: "window",
-                    parentRef: "app",
-                    kind: .window,
-                    typeName: "UIWindow",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    style: LoupeStyle(backgroundColor: LoupeColor(red: 0, green: 0, blue: 0, alpha: 1)),
-                    children: ["wrapper"]
-                ),
-                "wrapper": LoupeNode(
-                    ref: "wrapper",
-                    parentRef: "window",
-                    kind: .view,
-                    typeName: "_UINavigationBarTitleControl",
-                    frame: LoupeRect(x: 120, y: 60, width: 120, height: 24),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["title"]
-                ),
-                "title": LoupeNode(
-                    ref: "title",
-                    parentRef: "wrapper",
-                    kind: .view,
-                    typeName: "UILabel",
-                    text: "Examples",
-                    frame: LoupeRect(x: 120, y: 60, width: 120, height: 24),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    style: LoupeStyle(
-                        backgroundColor: LoupeColor(red: 0, green: 0, blue: 0, alpha: 0),
-                        textColor: LoupeColor(red: 0, green: 0, blue: 0, alpha: 1)
-                    )
-                ),
-            ]
-        )
-
-        let audit = LoupeLayoutAuditor.audit(snapshot)
-
-        #expect(!audit.issues.contains { $0.kind == .lowTextContrast && $0.ref == "title" })
-    }
-
-    @Test func auditIgnoresIntentionalModalOverlayOverlap() {
-        let snapshot = LoupeSnapshot(
-            id: "layout-modal-overlay",
-            capturedAt: Date(timeIntervalSince1970: 0),
-            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
-            rootRefs: ["root"],
-            nodes: [
-                "root": LoupeNode(
-                    ref: "root",
-                    parentRef: nil,
-                    kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["content", "alert"]
-                ),
-                "content": LoupeNode(
-                    ref: "content",
-                    parentRef: "root",
-                    kind: .view,
-                    typeName: "UIView",
-                    testID: "screen.content",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["behind-button"]
-                ),
-                "behind-button": LoupeNode(
-                    ref: "behind-button",
-                    parentRef: "content",
-                    kind: .view,
-                    typeName: "UIButton",
-                    role: "button",
-                    frame: LoupeRect(x: 20, y: 60, width: 30, height: 30),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: true
-                ),
-                "alert": LoupeNode(
-                    ref: "alert",
-                    parentRef: "root",
-                    kind: .view,
-                    typeName: "_UIAlertControllerPhoneTVMacView",
-                    text: "Reply Forward Cancel",
-                    frame: LoupeRect(x: 35, y: 280, width: 320, height: 280),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    uiKit: LoupeUIKitProperties(
-                        viewControllerRole: "alert",
-                        className: "_UIAlertControllerPhoneTVMacView",
-                        tag: 0,
-                        alpha: 1,
-                        isHidden: false,
-                        isOpaque: false,
-                        clipsToBounds: false,
-                        userInteractionEnabled: false,
-                        isFirstResponder: false
-                    )
-                ),
-            ]
-        )
-
-        let audit = LoupeLayoutAuditor.audit(snapshot)
-
-        #expect(!audit.issues.contains { $0.kind == .overlappingSiblings && $0.ref == "content" })
-        #expect(!audit.issues.contains { $0.kind == .smallInteractiveTarget && $0.ref == "behind-button" })
-        #expect(!audit.issues.contains { $0.kind == .missingTestID && $0.ref == "behind-button" })
-    }
-
-    @Test func auditIgnoresAppleModalBackdropOverlapByRuntimeAndAlertRole() {
-        let snapshot = LoupeSnapshot(
-            id: "layout-modal-popover-backdrop",
-            capturedAt: Date(timeIntervalSince1970: 0),
-            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
-            rootRefs: ["root"],
-            nodes: [
-                "root": LoupeNode(
-                    ref: "root",
-                    parentRef: nil,
-                    kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["backdrop", "popover"]
-                ),
-                "backdrop": LoupeNode(
-                    ref: "backdrop",
-                    parentRef: "root",
-                    kind: .view,
-                    typeName: "ProjectBackdropName",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
+                    frame: LoupeRect(x: 0, y: 180, width: 390, height: 16),
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: true,
-                    runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore")
+                    uiKit: scrollViewProperties(className: "HostingScrollView", contentSize: LoupeSize(width: 390, height: 16))
                 ),
-                "popover": LoupeNode(
-                    ref: "popover",
+                "search-field": LoupeNode(
+                    ref: "search-field",
                     parentRef: "root",
                     kind: .view,
-                    typeName: "ProjectPopoverName",
-                    semanticText: "Delete Report",
-                    frame: LoupeRect(x: 110, y: 125, width: 250, height: 136),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-                    children: ["alert"]
-                ),
-                "alert": LoupeNode(
-                    ref: "alert",
-                    parentRef: "popover",
-                    kind: .view,
-                    typeName: "ProjectAlertName",
-                    frame: LoupeRect(x: 110, y: 125, width: 240, height: 136),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-                    uiKit: LoupeUIKitProperties(
-                        viewControllerRole: "alert",
-                        className: "ProjectAlertName",
-                        tag: 0,
-                        alpha: 1,
-                        isHidden: false,
-                        isOpaque: false,
-                        clipsToBounds: false,
-                        userInteractionEnabled: false,
-                        isFirstResponder: false
-                    )
-                ),
-            ]
-        )
-
-        let audit = LoupeLayoutAuditor.audit(snapshot)
-
-        #expect(!audit.issues.contains { $0.kind == .overlappingSiblings && $0.ref == "backdrop" })
-    }
-
-    @Test func auditDoesNotTreatUserNamedModalClassesAsSystemOverlay() {
-        let snapshot = LoupeSnapshot(
-            id: "layout-user-named-modal-classes",
-            capturedAt: Date(timeIntervalSince1970: 0),
-            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
-            rootRefs: ["root"],
-            nodes: [
-                "root": LoupeNode(
-                    ref: "root",
-                    parentRef: nil,
-                    kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["backdrop", "popover"]
-                ),
-                "backdrop": LoupeNode(
-                    ref: "backdrop",
-                    parentRef: "root",
-                    kind: .view,
-                    typeName: "_UIPopoverDimmingView",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
+                    typeName: "UISearchBarTextField",
+                    role: "textField",
+                    text: "Movies, Shows, People",
+                    frame: LoupeRect(x: 16, y: 100, width: 358, height: 38),
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: true,
-                    uiKit: LoupeUIKitProperties(
-                        className: "_UIPopoverDimmingView",
-                        tag: 0,
-                        alpha: 1,
-                        isHidden: false,
-                        isOpaque: false,
-                        clipsToBounds: false,
-                        userInteractionEnabled: true,
-                        isFirstResponder: false
-                    )
-                ),
-                "popover": LoupeNode(
-                    ref: "popover",
-                    parentRef: "root",
-                    kind: .view,
-                    typeName: "_UIAlertControllerPhoneTVMacView",
-                    semanticText: "Delete Report",
-                    frame: LoupeRect(x: 110, y: 125, width: 250, height: 136),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    uiKit: LoupeUIKitProperties(
-                        className: "_UIAlertControllerPhoneTVMacView",
-                        tag: 0,
-                        alpha: 1,
-                        isHidden: false,
-                        isOpaque: false,
-                        clipsToBounds: false,
-                        userInteractionEnabled: false,
-                        isFirstResponder: false
-                    )
-                ),
-            ]
-        )
-
-        let audit = LoupeLayoutAuditor.audit(snapshot)
-
-        #expect(audit.issues.contains { $0.kind == .overlappingSiblings && $0.ref == "backdrop" })
-    }
-
-    @Test func auditIgnoresSwipeActionExpansionLayout() {
-        let snapshot = LoupeSnapshot(
-            id: "layout-swipe-actions",
-            capturedAt: Date(timeIntervalSince1970: 0),
-            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
-            rootRefs: ["root"],
-            nodes: [
-                "root": LoupeNode(
-                    ref: "root",
-                    parentRef: nil,
-                    kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["cell"]
-                ),
-                "cell": LoupeNode(
-                    ref: "cell",
-                    parentRef: "root",
-                    kind: .view,
-                    typeName: "MailCell",
-                    role: "cell",
-                    text: "Apple News",
-                    frame: LoupeRect(x: -222, y: 204, width: 402, height: 97),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: true,
-                    children: ["actions"]
-                ),
-                "actions": LoupeNode(
-                    ref: "actions",
-                    parentRef: "cell",
-                    kind: .view,
-                    typeName: "SwipeActionsView",
-                    text: "More Flag Trash",
-                    frame: LoupeRect(x: 180, y: 204, width: 804, height: 97),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["more", "flag", "trash"]
-                ),
-                "more": swipeActionWrapper(ref: "more", parentRef: "actions", text: "More", x: 180),
-                "flag": swipeActionWrapper(ref: "flag", parentRef: "actions", text: "Flag", x: 254),
-                "trash": swipeActionWrapper(ref: "trash", parentRef: "actions", text: "Trash", x: 328),
-            ]
-        )
-
-        let audit = LoupeLayoutAuditor.audit(snapshot)
-
-        #expect(!audit.issues.contains { $0.kind == .childOutsideParent && $0.ref == "actions" })
-        #expect(!audit.issues.contains { $0.kind == .childOutsideParent && ["more", "flag", "trash"].contains($0.ref) })
-        #expect(!audit.issues.contains { $0.kind == .overlappingSiblings && ["more", "flag", "trash"].contains($0.ref) })
-    }
-
-    @Test func auditUsesStructuredBarItemKindInsteadOfClassName() {
-        let snapshot = LoupeSnapshot(
-            id: "layout-structured-bar-kind",
-            capturedAt: Date(timeIntervalSince1970: 0),
-            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
-            rootRefs: ["root"],
-            nodes: [
-                "root": LoupeNode(
-                    ref: "root",
-                    parentRef: nil,
-                    kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    children: ["title", "item"]
-                ),
-                "title": LoupeNode(
-                    ref: "title",
-                    parentRef: "root",
-                    kind: .view,
-                    typeName: "UILabel",
-                    text: "Settings",
-                    frame: LoupeRect(x: 290, y: 50, width: 80, height: 28),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false
-                ),
-                "item": LoupeNode(
-                    ref: "item",
-                    parentRef: "root",
-                    kind: .barButtonItem,
-                    typeName: "ConflictingUserClassName",
-                    role: "button",
-                    text: "Edit",
-                    frame: LoupeRect(x: 320, y: 50, width: 44, height: 28),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: true,
-                    uiKit: LoupeUIKitProperties(
-                        className: "ConflictingUserClassName",
-                        tag: 0,
-                        alpha: 1,
-                        isHidden: false,
-                        isOpaque: false,
-                        clipsToBounds: false,
-                        userInteractionEnabled: true,
-                        isFirstResponder: false
-                    )
-                ),
-            ]
-        )
-
-        let audit = LoupeLayoutAuditor.audit(snapshot)
-
-        #expect(!audit.issues.contains { $0.kind == .overlappingSiblings && $0.ref == "title" })
-    }
-
-    @Test func auditIgnoresScrollOverlapReservedByAdjustedContentInset() {
-        let snapshot = scrollInsetOverlapSnapshot(id: "layout-scroll-inset-overlap", adjustedBottom: 84)
-
-        let audit = LoupeLayoutAuditor.audit(snapshot)
-
-        #expect(!audit.issues.contains { $0.kind == .overlappingSiblings && $0.ref == "messages" })
-    }
-
-    @Test func auditReportsScrollOverlapWithoutReservedInset() {
-        let snapshot = scrollInsetOverlapSnapshot(id: "layout-scroll-real-overlap", adjustedBottom: 0)
-
-        let audit = LoupeLayoutAuditor.audit(snapshot)
-
-        #expect(audit.issues.contains { $0.kind == .overlappingSiblings && $0.ref == "messages" })
-    }
-
-    @Test func auditIgnoresDisabledControlContrast() {
-        let white = LoupeColor(red: 1, green: 1, blue: 1, alpha: 1)
-        let disabledGray = LoupeColor(red: 0.75, green: 0.75, blue: 0.75, alpha: 1)
-        let snapshot = LoupeSnapshot(
-            id: "layout-disabled-control-contrast",
-            capturedAt: Date(timeIntervalSince1970: 0),
-            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
-            rootRefs: ["root"],
-            nodes: [
-                "root": LoupeNode(
-                    ref: "root",
-                    parentRef: nil,
-                    kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    style: LoupeStyle(backgroundColor: white),
-                    children: ["send"]
-                ),
-                "send": LoupeNode(
-                    ref: "send",
-                    parentRef: "root",
-                    kind: .view,
-                    typeName: "DisabledSendControl",
-                    role: "button",
-                    text: "Send",
-                    frame: LoupeRect(x: 320, y: 760, width: 52, height: 36),
-                    isVisible: true,
-                    isEnabled: false,
-                    isInteractive: true,
-                    style: LoupeStyle(backgroundColor: white, textColor: disabledGray),
-                    uiKit: LoupeUIKitProperties(
-                        className: "DisabledSendControl",
-                        tag: 0,
-                        alpha: 1,
-                        isHidden: false,
-                        isOpaque: false,
-                        clipsToBounds: false,
-                        userInteractionEnabled: true,
-                        isFirstResponder: false,
-                        control: LoupeUIControlProperties(controlState: "normal,disabled"),
-                        button: LoupeUIButtonProperties()
-                    ),
-                    children: ["send-label"]
-                ),
-                "send-label": LoupeNode(
-                    ref: "send-label",
-                    parentRef: "send",
-                    kind: .view,
-                    typeName: "UILabel",
-                    role: "staticText",
-                    text: "Send",
-                    frame: LoupeRect(x: 327, y: 769, width: 38, height: 18),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    style: LoupeStyle(textColor: disabledGray)
-                ),
-            ]
-        )
-
-        let audit = LoupeLayoutAuditor.audit(snapshot)
-
-        #expect(!audit.issues.contains { $0.kind == .lowTextContrast && $0.ref == "send" })
-        #expect(!audit.issues.contains { $0.kind == .lowTextContrast && $0.ref == "send-label" })
-    }
-
-    @Test func auditIgnoresEmptyTextInputPlaceholderContrast() {
-        let white = LoupeColor(red: 1, green: 1, blue: 1, alpha: 1)
-        let placeholderGray = LoupeColor(red: 0.75, green: 0.75, blue: 0.75, alpha: 1)
-        let snapshot = LoupeSnapshot(
-            id: "layout-placeholder-contrast",
-            capturedAt: Date(timeIntervalSince1970: 0),
-            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
-            rootRefs: ["root"],
-            nodes: [
-                "root": LoupeNode(
-                    ref: "root",
-                    parentRef: nil,
-                    kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: false,
-                    style: LoupeStyle(backgroundColor: white),
-                    children: ["input", "body"]
-                ),
-                "input": LoupeNode(
-                    ref: "input",
-                    parentRef: "root",
-                    kind: .view,
-                    typeName: "CustomInputView",
-                    text: "",
-                    renderedText: "",
-                    semanticText: "Aa",
-                    frame: LoupeRect(x: 20, y: 760, width: 260, height: 38),
-                    isVisible: true,
-                    isEnabled: true,
-                    isInteractive: true,
-                    style: LoupeStyle(backgroundColor: LoupeColor(red: 0, green: 0, blue: 0, alpha: 0)),
-                    uiKit: LoupeUIKitProperties(
-                        className: "CustomInputView",
-                        tag: 0,
-                        alpha: 1,
-                        isHidden: false,
-                        isOpaque: false,
-                        clipsToBounds: false,
-                        userInteractionEnabled: true,
-                        isFirstResponder: false,
-                        textView: LoupeUITextViewProperties()
-                    ),
+                    uiKit: textFieldProperties(className: "UISearchBarTextField"),
                     children: ["placeholder"]
+                ),
+                "scope-control": LoupeNode(
+                    ref: "scope-control",
+                    parentRef: "root",
+                    kind: .view,
+                    typeName: "UISegmentedControl",
+                    role: "segmentedControl",
+                    text: "All Movies Series People",
+                    frame: LoupeRect(x: 16, y: 160, width: 358, height: 32),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: true,
+                    uiKit: segmentedControlProperties(className: "UISegmentedControl")
+                ),
+                "text-canvas": LoupeNode(
+                    ref: "text-canvas",
+                    parentRef: "root",
+                    kind: .view,
+                    typeName: "_UITextLayoutCanvasView",
+                    frame: LoupeRect(x: 55, y: 72, width: 232, height: 40),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    uiKit: plainUIKitProperties(className: "_UITextLayoutCanvasView"),
+                    children: ["text-fragment"]
+                ),
+                "text-fragment": LoupeNode(
+                    ref: "text-fragment",
+                    parentRef: "text-canvas",
+                    kind: .view,
+                    typeName: "_UITextLayoutFragmentView",
+                    frame: LoupeRect(x: 47, y: 81, width: 81, height: 22),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    uiKit: plainUIKitProperties(className: "_UITextLayoutFragmentView")
                 ),
                 "placeholder": LoupeNode(
                     ref: "placeholder",
-                    parentRef: "input",
+                    parentRef: "search-field",
                     kind: .view,
-                    typeName: "CustomPlaceholderLabel",
+                    typeName: "UISearchBarTextFieldLabel",
                     role: "staticText",
-                    text: "Aa",
-                    frame: LoupeRect(x: 24, y: 768, width: 20, height: 20),
+                    text: "Movies, Shows, People",
+                    frame: LoupeRect(x: 55, y: 112, width: 174, height: 20),
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: false,
-                    style: LoupeStyle(textColor: placeholderGray)
+                    style: LoupeStyle(textColor: LoupeColor(red: 0.24, green: 0.24, blue: 0.24, alpha: 0.6)),
+                    uiKit: labelProperties(className: "UISearchBarTextFieldLabel")
                 ),
-                "body": LoupeNode(
-                    ref: "body",
+                "low-contrast-title": LoupeNode(
+                    ref: "low-contrast-title",
                     parentRef: "root",
                     kind: .view,
                     typeName: "UILabel",
                     role: "staticText",
-                    text: "Body",
-                    frame: LoupeRect(x: 20, y: 120, width: 80, height: 24),
+                    text: "Low contrast",
+                    frame: LoupeRect(x: 16, y: 220, width: 160, height: 24),
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: false,
-                    style: LoupeStyle(textColor: placeholderGray)
+                    style: LoupeStyle(textColor: LoupeColor(red: 0.6, green: 0.6, blue: 0.6, alpha: 1)),
+                    uiKit: labelProperties(className: "UILabel")
                 ),
             ]
         )
 
         let audit = LoupeLayoutAuditor.audit(snapshot)
 
+        #expect(!audit.issues.contains { $0.kind == .smallInteractiveTarget && $0.ref == "thin-scroll" })
+        #expect(!audit.issues.contains { $0.kind == .smallInteractiveTarget && $0.ref == "search-field" })
+        #expect(!audit.issues.contains { $0.kind == .smallInteractiveTarget && $0.ref == "scope-control" })
+        #expect(!audit.issues.contains { $0.kind == .childOutsideParent && $0.ref == "text-fragment" })
         #expect(!audit.issues.contains { $0.kind == .lowTextContrast && $0.ref == "placeholder" })
-        #expect(audit.issues.contains { $0.kind == .lowTextContrast && $0.ref == "body" })
+        #expect(audit.issues.contains { $0.kind == .lowTextContrast && $0.ref == "low-contrast-title" })
+    }
+
+    @Test func auditIgnoresPassiveAppKitImageElementSmallTargetNoise() {
+        let snapshot = LoupeSnapshot(
+            id: "layout-passive-image-noise",
+            capturedAt: Date(timeIntervalSince1970: 0),
+            screen: LoupeScreen(size: LoupeSize(width: 1920, height: 1080), scale: 2),
+            rootRefs: ["root"],
+            nodes: [
+                "root": LoupeNode(
+                    ref: "root",
+                    parentRef: nil,
+                    kind: .view,
+                    typeName: "NSView",
+                    frame: LoupeRect(x: 0, y: 0, width: 1920, height: 1080),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    children: ["passive-image", "gesture-image"]
+                ),
+                "passive-image": appKitImageView(
+                    ref: "passive-image",
+                    frame: LoupeRect(x: 100, y: 100, width: 32, height: 32),
+                    gestureRecognizers: []
+                ),
+                "gesture-image": appKitImageView(
+                    ref: "gesture-image",
+                    frame: LoupeRect(x: 160, y: 100, width: 32, height: 32),
+                    gestureRecognizers: ["NSClickGestureRecognizer"]
+                ),
+            ]
+        )
+
+        let audit = LoupeLayoutAuditor.audit(snapshot)
+
+        #expect(!audit.issues.contains { $0.kind == .smallInteractiveTarget && $0.ref == "passive-image" })
+        #expect(audit.issues.contains { $0.kind == .smallInteractiveTarget && $0.ref == "gesture-image" })
+    }
+
+    @Test func auditAllowsScrollContentAndFocusDecorationsOutsideParentBounds() {
+        let snapshot = LoupeSnapshot(
+            id: "layout-scroll-focus-noise",
+            capturedAt: Date(timeIntervalSince1970: 0),
+            screen: LoupeScreen(size: LoupeSize(width: 1920, height: 1080), scale: 2),
+            rootRefs: ["root"],
+            nodes: [
+                "root": LoupeNode(
+                    ref: "root",
+                    parentRef: nil,
+                    kind: .view,
+                    typeName: "UIView",
+                    frame: LoupeRect(x: 0, y: 0, width: 1920, height: 1080),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    children: ["table", "focus-parent"]
+                ),
+                "table": LoupeNode(
+                    ref: "table",
+                    parentRef: "root",
+                    kind: .view,
+                    typeName: "UITableView",
+                    role: "tableView",
+                    frame: LoupeRect(x: 0, y: 0, width: 880, height: 1080),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: true,
+                    uiKit: tableViewProperties(className: "UITableView"),
+                    children: ["table-content"]
+                ),
+                "table-content": LoupeNode(
+                    ref: "table-content",
+                    parentRef: "table",
+                    kind: .view,
+                    typeName: "UITableViewWrapperView",
+                    role: "scrollView",
+                    frame: LoupeRect(x: 80, y: 157, width: 800, height: 4096),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: true,
+                    uiKit: tableViewProperties(className: "UITableViewWrapperView")
+                ),
+                "focus-parent": LoupeNode(
+                    ref: "focus-parent",
+                    parentRef: "root",
+                    kind: .view,
+                    typeName: "_UIFloatingContentTransformView",
+                    frame: LoupeRect(x: 80, y: 157, width: 800, height: 112),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    uiKit: plainUIKitProperties(className: "_UIFloatingContentTransformView"),
+                    children: ["focus-halo"]
+                ),
+                "focus-halo": LoupeNode(
+                    ref: "focus-halo",
+                    parentRef: "focus-parent",
+                    kind: .view,
+                    typeName: "_UIFloatingContentCornerRadiusAnimatingView",
+                    frame: LoupeRect(x: 76, y: 153, width: 808, height: 120),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    uiKit: plainUIKitProperties(className: "_UIFloatingContentCornerRadiusAnimatingView")
+                ),
+            ]
+        )
+
+        let audit = LoupeLayoutAuditor.audit(snapshot)
+
+        #expect(!audit.issues.contains { $0.kind == .childOutsideParent && $0.ref == "table-content" })
+        #expect(!audit.issues.contains { $0.kind == .childOutsideParent && $0.ref == "focus-halo" })
     }
 
     @Test func auditIgnoresUnidentifiedBackgroundLayerOverlap() {
@@ -1358,66 +951,100 @@ struct LayoutAuditTests {
         #expect(!audit.issues.contains { $0.kind == .overlappingSiblings })
     }
 
-    private func scrollInsetOverlapSnapshot(id: String, adjustedBottom: Double) -> LoupeSnapshot {
-        LoupeSnapshot(
-            id: id,
+    @Test func auditIgnoresLoupeProbeOverlapNoise() {
+        let snapshot = LoupeSnapshot(
+            id: "watch-probe-overlap",
             capturedAt: Date(timeIntervalSince1970: 0),
-            screen: LoupeScreen(size: LoupeSize(width: 400, height: 800), scale: 3),
+            screen: LoupeScreen(size: LoupeSize(width: 208, height: 248), scale: 2),
             rootRefs: ["root"],
             nodes: [
                 "root": LoupeNode(
                     ref: "root",
                     parentRef: nil,
-                    kind: .view,
-                    typeName: "UIView",
-                    frame: LoupeRect(x: 0, y: 0, width: 400, height: 800),
+                    kind: .application,
+                    typeName: "WKApplication",
+                    role: "application",
+                    frame: LoupeRect(x: 0, y: 0, width: 208, height: 248),
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: false,
-                    children: ["messages", "input"]
+                    children: ["form", "button"]
                 ),
-                "messages": LoupeNode(
-                    ref: "messages",
+                "form": LoupeNode(
+                    ref: "form",
                     parentRef: "root",
                     kind: .view,
-                    typeName: "CustomMessagesList",
-                    role: "collectionView",
-                    frame: LoupeRect(x: 0, y: 0, width: 400, height: 800),
+                    typeName: "LoupeWatchProbe",
+                    role: "group",
+                    testID: "safetimer.addForm",
+                    text: "Add timer form",
+                    frame: LoupeRect(x: 2, y: 62, width: 204, height: 150),
                     isVisible: true,
                     isEnabled: true,
-                    isInteractive: true,
-                    uiKit: LoupeUIKitProperties(
-                        className: "CustomMessagesList",
-                        tag: 0,
-                        alpha: 1,
-                        isHidden: false,
-                        isOpaque: true,
-                        clipsToBounds: false,
-                        userInteractionEnabled: true,
-                        isFirstResponder: false,
-                        scrollView: LoupeUIScrollViewProperties(
-                            contentOffset: LoupePoint(x: 0, y: 400),
-                            contentSize: LoupeSize(width: 400, height: 1200),
-                            adjustedContentInset: LoupeInsets(top: 0, left: 0, bottom: adjustedBottom, right: 0),
-                            isScrollEnabled: true,
-                            alwaysBounceVertical: true,
-                            alwaysBounceHorizontal: false
-                        )
-                    )
+                    isInteractive: false,
+                    custom: ["loupe.probe": .bool(true)]
                 ),
-                "input": LoupeNode(
-                    ref: "input",
+                "button": LoupeNode(
+                    ref: "button",
                     parentRef: "root",
                     kind: .view,
-                    typeName: "CustomInputContainer",
-                    semanticText: "Aa Send",
-                    frame: LoupeRect(x: 0, y: 716, width: 400, height: 84),
+                    typeName: "LoupeWatchProbe",
+                    role: "group",
+                    testID: "safetimer.addForm.saveButton",
+                    text: "Save timer button",
+                    frame: LoupeRect(x: 15, y: 184.6, width: 178, height: 52.5),
                     isVisible: true,
                     isEnabled: true,
-                    isInteractive: false
+                    isInteractive: false,
+                    custom: ["loupe.probe": .bool(true)]
                 ),
             ]
         )
+
+        let audit = LoupeLayoutAuditor.audit(snapshot)
+
+        #expect(!audit.issues.contains { $0.kind == .overlappingSiblings })
+    }
+
+    @Test func auditIgnoresLoupeProbeContainmentNoise() {
+        let snapshot = LoupeSnapshot(
+            id: "probe-containment",
+            capturedAt: Date(timeIntervalSince1970: 0),
+            screen: LoupeScreen(size: LoupeSize(width: 800, height: 850), scale: 1),
+            rootRefs: ["root"],
+            nodes: [
+                "root": LoupeNode(
+                    ref: "root",
+                    parentRef: nil,
+                    kind: .application,
+                    typeName: "UIApplication",
+                    role: "application",
+                    frame: LoupeRect(x: 0, y: 0, width: 800, height: 850),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    children: ["probe"]
+                ),
+                "probe": LoupeNode(
+                    ref: "probe",
+                    parentRef: "root",
+                    kind: .view,
+                    typeName: "LoupeRegisteredProbe",
+                    role: "button",
+                    testID: "openimmersive.enterStreamURL",
+                    text: "Enter Stream URL",
+                    frame: LoupeRect(x: 725.25, y: 526.25, width: 207.5, height: 44),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: true,
+                    custom: ["loupe.probe": .bool(true)]
+                ),
+            ]
+        )
+
+        let audit = LoupeLayoutAuditor.audit(snapshot)
+
+        #expect(!audit.issues.contains { $0.kind == .childOutsideParent })
     }
 
     private func button(ref: String, testID: String?, frame: LoupeRect) -> LoupeNode {
@@ -1524,6 +1151,186 @@ struct LayoutAuditTests {
                 userInteractionEnabled: isInteractive,
                 isFirstResponder: false
             )
+        )
+    }
+
+    private func appKitImageView(
+        ref: String,
+        frame: LoupeRect,
+        gestureRecognizers: [String]
+    ) -> LoupeNode {
+        LoupeNode(
+            ref: ref,
+            parentRef: "root",
+            kind: .view,
+            typeName: "ImageView",
+            role: "image",
+            frame: frame,
+            isVisible: true,
+            isEnabled: true,
+            isInteractive: true,
+            accessibility: LoupeAccessibility(
+                label: "Solar",
+                traits: ["image"],
+                frame: frame,
+                isElement: true
+            ),
+            uiKit: LoupeUIKitProperties(
+                className: "ImageView",
+                tag: 0,
+                alpha: 1,
+                isHidden: false,
+                isOpaque: false,
+                clipsToBounds: false,
+                userInteractionEnabled: true,
+                gestureRecognizers: gestureRecognizers,
+                isFirstResponder: false,
+                control: LoupeUIControlProperties(controlState: "enabled", controlEvents: [])
+            )
+        )
+    }
+
+    private func tabBarButton(
+        ref: String,
+        typeName: String = "UITabBarButton",
+        role: String? = nil,
+        text: String? = nil,
+        frame: LoupeRect = LoupeRect(x: 986, y: 64, width: 100, height: 32),
+        custom: [String: LoupeMetadataValue] = [:]
+    ) -> LoupeNode {
+        LoupeNode(
+            ref: ref,
+            parentRef: "root",
+            kind: .view,
+            typeName: typeName,
+            role: role,
+            text: text,
+            frame: frame,
+            isVisible: true,
+            isEnabled: true,
+            isInteractive: true,
+            uiKit: LoupeUIKitProperties(
+                className: "UITabBarButton",
+                tag: 0,
+                alpha: 1,
+                isHidden: false,
+                isOpaque: false,
+                clipsToBounds: false,
+                userInteractionEnabled: true,
+                isFirstResponder: false,
+                canBecomeFocused: true,
+                control: LoupeUIControlProperties(controlState: "normal", controlEvents: ["primaryActionTriggered"])
+            ),
+            custom: custom
+        )
+    }
+
+    private func tableViewProperties(className: String) -> LoupeUIKitProperties {
+        LoupeUIKitProperties(
+            className: className,
+            tag: 0,
+            alpha: 1,
+            isHidden: false,
+            isOpaque: true,
+            clipsToBounds: className == "UITableView",
+            userInteractionEnabled: true,
+            isFirstResponder: false,
+            scrollView: LoupeUIScrollViewProperties(
+                contentOffset: LoupePoint(x: 0, y: -157),
+                contentSize: LoupeSize(width: 880, height: 4096),
+                adjustedContentInset: LoupeInsets(top: 157, left: 0, bottom: 60, right: 0),
+                isScrollEnabled: true,
+                alwaysBounceVertical: true,
+                alwaysBounceHorizontal: false
+            ),
+            tableView: LoupeUITableViewProperties(
+                rowHeight: -1,
+                estimatedRowHeight: -1,
+                usesAutomaticRowHeight: true,
+                usesEstimatedRowHeight: false,
+                delegateRespondsToHeightForRowAt: false,
+                delegateRespondsToEstimatedHeightForRowAt: false
+            )
+        )
+    }
+
+    private func scrollViewProperties(className: String, contentSize: LoupeSize) -> LoupeUIKitProperties {
+        LoupeUIKitProperties(
+            className: className,
+            tag: 0,
+            alpha: 1,
+            isHidden: false,
+            isOpaque: true,
+            clipsToBounds: true,
+            userInteractionEnabled: true,
+            isFirstResponder: false,
+            scrollView: LoupeUIScrollViewProperties(
+                contentOffset: LoupePoint(x: 0, y: 0),
+                contentSize: contentSize,
+                adjustedContentInset: LoupeInsets(top: 0, left: 0, bottom: 0, right: 0),
+                isScrollEnabled: true,
+                alwaysBounceVertical: false,
+                alwaysBounceHorizontal: false
+            )
+        )
+    }
+
+    private func textFieldProperties(className: String) -> LoupeUIKitProperties {
+        LoupeUIKitProperties(
+            className: className,
+            tag: 0,
+            alpha: 1,
+            isHidden: false,
+            isOpaque: false,
+            clipsToBounds: false,
+            userInteractionEnabled: true,
+            isFirstResponder: false,
+            textField: LoupeUITextFieldProperties()
+        )
+    }
+
+    private func segmentedControlProperties(className: String) -> LoupeUIKitProperties {
+        LoupeUIKitProperties(
+            className: className,
+            tag: 0,
+            alpha: 1,
+            isHidden: false,
+            isOpaque: false,
+            clipsToBounds: true,
+            userInteractionEnabled: true,
+            isFirstResponder: false,
+            control: LoupeUIControlProperties(controlState: "normal", controlEvents: ["valueChanged"]),
+            segmentedControl: LoupeUISegmentedControlProperties(
+                selectedSegmentIndex: 0,
+                segments: ["All", "Movies", "Series", "People"]
+            )
+        )
+    }
+
+    private func labelProperties(className: String) -> LoupeUIKitProperties {
+        LoupeUIKitProperties(
+            className: className,
+            tag: 0,
+            alpha: 1,
+            isHidden: false,
+            isOpaque: false,
+            clipsToBounds: false,
+            userInteractionEnabled: false,
+            isFirstResponder: false,
+            label: LoupeUILabelProperties()
+        )
+    }
+
+    private func plainUIKitProperties(className: String) -> LoupeUIKitProperties {
+        LoupeUIKitProperties(
+            className: className,
+            tag: 0,
+            alpha: 1,
+            isHidden: false,
+            isOpaque: false,
+            clipsToBounds: false,
+            userInteractionEnabled: true,
+            isFirstResponder: false
         )
     }
 }

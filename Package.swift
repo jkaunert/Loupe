@@ -7,7 +7,10 @@ let package = Package(
     name: "loupe",
     platforms: [
         .iOS(.v15),
+        .tvOS(.v15),
         .macOS(.v14),
+        .watchOS(.v8),
+        .visionOS(.v1),
     ],
     products: [
         .library(
@@ -70,6 +73,10 @@ let package = Package(
         .testTarget(
             name: "LoupeCLITests",
             dependencies: ["LoupeCLI"]
+        ),
+        .testTarget(
+            name: "LoupeKitPlatformTests",
+            dependencies: ["LoupeCore", "LoupeKit"]
         ),
     ]
 )

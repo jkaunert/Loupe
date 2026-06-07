@@ -26,116 +26,57 @@ struct LoupeCLI {
 
         let command = arguments.removeFirst()
 
-        if arguments.contains("--help") || arguments.contains("-h") {
-            printCommandHelp(command)
+        if command == "help" {
+            if let deprecatedCommand = arguments.first,
+               let replacement = deprecatedCommandReplacement(deprecatedCommand) {
+                printDeprecatedCommandWarning(command: deprecatedCommand, replacement: replacement)
+                printCommandHelp(replacement)
+                return
+            }
+            printCommandHelp(arguments)
+            return
+        }
+
+        if command != "--help", command != "-h", arguments.contains("--help") || arguments.contains("-h") {
+            if let replacement = deprecatedCommandReplacement(command) {
+                printDeprecatedCommandWarning(command: command, replacement: replacement)
+                printCommandHelp(replacement)
+                return
+            }
+            printCommandHelp(helpPath(command: command, arguments: arguments))
             return
         }
 
         switch command {
-        case "accessibility":
-            try accessibility(arguments)
-        case "audit":
-            try audit(arguments)
-        case "compact":
-            try compact(arguments)
-        case "capture-report":
-            try await captureReport(arguments)
-        case "compare-design":
-            try compareDesign(arguments)
-        case "constraints":
-            try await constraints(arguments)
-        case "cleanup":
-            try await cleanup(arguments)
-        case "deactivate-constraint":
-            try await mutateConstraint(arguments, deactivate: true)
-        case "diff":
-            try diff(arguments)
         case "doctor":
             try doctor(arguments)
-        case "explore-routes":
-            try await exploreRoutes(arguments)
-        case "fetch":
-            try await fetch(arguments)
-        case "install-skills":
-            try skills(["install"] + arguments)
-        case "logs":
-            try await runtimeFetch(
-                arguments,
-                path: "/logs",
-                usage: "loupe logs [--host <url>] [--udid <sim>] [--bundle-id <id>] [--output <path>]"
-            )
-        case "apps", "runtimes":
-            try await runtimes(arguments)
+        case "app":
+            try await app(arguments)
+        case "debug":
+            try await debug(arguments)
+        case "act":
+            try await act(arguments)
+        case "ui":
+            try await ui(arguments)
         case "injector-path":
             try injectorPath(arguments)
-        case "inspect":
-            try inspect(arguments)
-        case "reflect":
-            try reflect(arguments)
-        case "runtime":
-            try await runtimeFetch(arguments, path: "/runtime", usage: "loupe runtime [--host <url>] [--udid <sim>] [--output <path>]")
-        case "mutations":
-            try await mutations(arguments)
-        case "paint-stack":
-            try await paintStack(arguments)
-        case "set-many":
-            try await setMany(arguments)
-        case "set", "mutate":
-            try await set(arguments)
-        case "set-constraint":
-            try await mutateConstraint(arguments, deactivate: false)
-        case "query":
-            try await query(arguments)
-        case "launch":
-            try await launch(arguments)
-        case "screenshot":
-            try screenshot(arguments)
-        case "screen-map":
-            try await screenMap(arguments)
         case "skills":
             try skills(arguments)
-        case "start":
-            try await start(arguments)
-        case "subtree":
-            try subtree(arguments)
-        case "tree":
-            try await tree(arguments)
-        case "use":
-            try await use(arguments)
-        case "current":
-            try await current(arguments)
-        case "text-map":
-            try await tree(arguments + ["--text"])
-        case "trace-summary":
-            try traceSummary(arguments)
-        case "tap", "swipe", "drag", "pinch", "type":
-            try await action(command: command, arguments: arguments)
         case "version", "--version":
             printVersion()
-        case "wait-for-visible":
-            try await waitFor(arguments, mode: .visible)
-        case "wait-for-gone":
-            try await waitFor(arguments, mode: .gone)
-        case "wait-for-value":
-            try await waitFor(arguments, mode: .value)
-        case "help", "--help", "-h":
-            if let command = arguments.first {
-                printCommandHelp(command)
-            } else {
-                printHelp()
-            }
+        case "--help", "-h":
+            printHelp()
         default:
+            if try await runDeprecatedTopLevelCommand(command, arguments: arguments) {
+                return
+            }
             throw CLIError("Unknown command: \(command)")
         }
     }
 
-    private static func compact(_ arguments: [String]) throws {
-        guard arguments.count == 1 else {
-            throw CLIError("Usage: loupe compact <snapshot.json>")
-        }
-
-        let url = URL(fileURLWithPath: arguments[0])
-        let data = try Data(contentsOf: url)
+    static func compact(_ arguments: [String]) throws {
+        let options = try CompactOptions(arguments)
+        let data = try Data(contentsOf: options.snapshotURL)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
@@ -145,11 +86,10 @@ struct LoupeCLI {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        FileHandle.standardOutput.write(try encoder.encode(observation))
-        FileHandle.standardOutput.write(Data("\n".utf8))
+        try write(data: encoder.encode(observation), outputURL: options.outputURL)
     }
 
-    private static func screenMap(_ arguments: [String]) async throws {
+    static func screenMap(_ arguments: [String]) async throws {
         let options = try ScreenMapOptions(arguments)
         let snapshot: LoupeSnapshot
         if let snapshotURL = options.snapshotURL {
@@ -182,7 +122,7 @@ struct LoupeCLI {
         FileHandle.standardOutput.write(Data("\n".utf8))
     }
 
-    private static func captureReport(_ arguments: [String]) async throws {
+    static func captureReport(_ arguments: [String]) async throws {
         let options = try CaptureReportOptions(arguments)
         let host = try await resolvedRuntimeHost(
             requestedHost: options.host,
@@ -241,8 +181,13 @@ struct LoupeCLI {
             didWriteLogs = false
         }
 
-        let screenshotUDID = options.udid ?? runtimeState?.identity.simulatorUDID ?? "booted"
-        try captureSimulatorScreenshot(udid: screenshotUDID, outputURL: screenshotURL)
+        let screenshotPath: String?
+        if let screenshotUDID = captureReportScreenshotUDID(options: options, runtimeState: runtimeState) {
+            try captureSimulatorScreenshot(udid: screenshotUDID, outputURL: screenshotURL)
+            screenshotPath = screenshotURL.path
+        } else {
+            screenshotPath = nil
+        }
 
         let report = CaptureReport(
             capturedAt: Date(),
@@ -252,7 +197,7 @@ struct LoupeCLI {
             snapshotID: snapshot.id,
             screen: snapshot.screen,
             artifacts: CaptureReportArtifacts(
-                screenshot: screenshotURL.path,
+                screenshot: screenshotPath,
                 snapshot: snapshotURL.path,
                 screenMap: screenMapURL.path,
                 accessibility: accessibilityURL.path,
@@ -285,12 +230,29 @@ struct LoupeCLI {
         try writeJSON(report, to: summaryURL)
         try renderCaptureReportMarkdown(report).write(to: summaryMarkdownURL, atomically: true, encoding: .utf8)
         print("report: \(options.outputDirectory.path)")
-        print("screenshot: \(screenshotURL.path)")
+        if let screenshotPath {
+            print("screenshot: \(screenshotPath)")
+        } else {
+            print("screenshot: unavailable for this runtime")
+        }
         print("summary: \(summaryURL.path)")
         print("screen-map: \(screenMapURL.path)")
         if didWriteLogs {
             print("logs: \(logsURL.path)")
         }
+    }
+
+    private static func captureReportScreenshotUDID(
+        options: CaptureReportOptions,
+        runtimeState: LoupeRuntimeState?
+    ) -> String? {
+        if let udid = options.udid {
+            return udid
+        }
+        if let runtimeState {
+            return runtimeState.identity.simulatorUDID
+        }
+        return "booted"
     }
 
     private static func captureReportScrollViews(_ snapshot: LoupeSnapshot) -> [CaptureReportScrollView] {
@@ -312,7 +274,7 @@ struct LoupeCLI {
             }
     }
 
-    private static func paintStack(_ arguments: [String]) async throws {
+    static func paintStack(_ arguments: [String]) async throws {
         let options = try PaintStackOptions(arguments)
         let snapshot: LoupeSnapshot
         if let snapshotURL = options.snapshotURL {
@@ -357,7 +319,7 @@ struct LoupeCLI {
         }
     }
 
-    private static func query(_ arguments: [String]) async throws {
+    static func query(_ arguments: [String]) async throws {
         let options = try QueryOptions(arguments)
         let snapshot: LoupeSnapshot
         if let snapshotURL = options.snapshotURL {
@@ -408,7 +370,7 @@ struct LoupeCLI {
         FileHandle.standardOutput.write(Data("\n".utf8))
     }
 
-    private static func accessibility(_ arguments: [String]) throws {
+    static func accessibility(_ arguments: [String]) throws {
         let options = try AccessibilityOptions(arguments)
         let data = try Data(contentsOf: options.snapshotURL)
         let decoder = JSONDecoder()
@@ -419,11 +381,10 @@ struct LoupeCLI {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        FileHandle.standardOutput.write(try encoder.encode(tree))
-        FileHandle.standardOutput.write(Data("\n".utf8))
+        try write(data: encoder.encode(tree), outputURL: options.outputURL)
     }
 
-    private static func inspect(_ arguments: [String]) throws {
+    static func inspect(_ arguments: [String]) throws {
         let options = try InspectOptions(arguments)
         let data = try Data(contentsOf: options.snapshotURL)
         let decoder = JSONDecoder()
@@ -450,7 +411,7 @@ struct LoupeCLI {
         FileHandle.standardOutput.write(Data("\n".utf8))
     }
 
-    private static func subtree(_ arguments: [String]) throws {
+    static func subtree(_ arguments: [String]) throws {
         let options = try SubtreeOptions(arguments)
         let data = try Data(contentsOf: options.snapshotURL)
         let decoder = JSONDecoder()
@@ -473,7 +434,7 @@ struct LoupeCLI {
         FileHandle.standardOutput.write(Data("\n".utf8))
     }
 
-    private static func tree(_ arguments: [String]) async throws {
+    static func tree(_ arguments: [String]) async throws {
         let options = try TreeOptions(arguments)
         let snapshot: LoupeSnapshot
         let accessibilityTree: LoupeAccessibilityTree?
@@ -484,7 +445,7 @@ struct LoupeCLI {
             decoder.dateDecodingStrategy = .iso8601
             snapshot = try decoder.decode(LoupeSnapshot.self, from: data)
             accessibilityTree = options.tree == .accessibility
-                ? LoupeAccessibilityTree.build(from: snapshot, includeHidden: options.includeHidden)
+                ? LoupeAccessibilityTree.build(from: snapshot, includeHidden: options.includeHidden, visibilityMode: .occlusion)
                 : nil
         } else {
             let host = try await resolvedRuntimeHost(
@@ -524,7 +485,7 @@ struct LoupeCLI {
         print(output)
     }
 
-    private static func audit(_ arguments: [String]) throws {
+    static func audit(_ arguments: [String]) throws {
         let options = try AuditOptions(arguments)
         let data = try Data(contentsOf: options.snapshotURL)
         let decoder = JSONDecoder()
@@ -557,7 +518,7 @@ struct LoupeCLI {
         return LoupeLayoutAudit(snapshotID: audit.snapshotID, issues: issues)
     }
 
-    private static func diff(_ arguments: [String]) throws {
+    static func diff(_ arguments: [String]) throws {
         let options = try DiffOptions(arguments)
         let before = try decodeSnapshot(from: options.beforeURL)
         let after = try decodeSnapshot(from: options.afterURL)
@@ -574,7 +535,7 @@ struct LoupeCLI {
         print(renderSnapshotDiff(summary, limit: options.limit, changedOnly: options.changedOnly))
     }
 
-    private static func traceSummary(_ arguments: [String]) throws {
+    static func traceSummary(_ arguments: [String]) throws {
         let options = try TraceSummaryOptions(arguments)
         let summary = try makeTraceSummary(directory: options.directory)
 
@@ -590,7 +551,7 @@ struct LoupeCLI {
         print(renderTraceSummary(summary, limit: options.limit))
     }
 
-    private static func compareDesign(_ arguments: [String]) throws {
+    static func compareDesign(_ arguments: [String]) throws {
         let options = try CompareDesignOptions(arguments)
         let snapshot = try decodeSnapshot(from: options.snapshotURL)
         let decoder = JSONDecoder()
@@ -616,12 +577,260 @@ struct LoupeCLI {
             return
         }
 
-        print(renderDesignComparison(comparison, limit: options.limit))
+        print(
+            renderDesignComparison(
+                comparison,
+                limit: options.limit,
+                suggestMutations: options.suggestMutations,
+                snapshotURL: options.snapshotURL,
+                suggestionHost: options.suggestionHost
+            )
+        )
     }
 
-    private static func skills(_ arguments: [String]) throws {
+    static func applyDesignSuggestions(_ arguments: [String]) async throws {
+        let options = try ApplyDesignSuggestionsOptions(arguments)
+        let decoder = JSONDecoder()
+        let comparison = try decoder.decode(
+            LoupeDesignComparison.self,
+            from: Data(contentsOf: options.compareURL)
+        )
+        let selectedSuggestions = options.selectedSuggestions(from: comparison.suggestions)
+        guard !selectedSuggestions.isEmpty else {
+            throw CLIError("apply-design-suggestions found no suggestions matching the requested filters")
+        }
+
+        try FileManager.default.createDirectory(
+            at: options.outputDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let selectedURL = options.outputDirectory.appendingPathComponent("selected-suggestions.json")
+        let beforeURL = options.outputDirectory.appendingPathComponent("before-snapshot.json")
+        let afterURL = options.outputDirectory.appendingPathComponent("after-snapshot.json")
+        let diffURL = options.outputDirectory.appendingPathComponent("diff.json")
+        let responsesURL = options.outputDirectory.appendingPathComponent("responses.json")
+        let summaryURL = options.outputDirectory.appendingPathComponent("summary.json")
+        try writeJSON(selectedSuggestions, to: selectedURL)
+
+        if options.dryRun {
+            let applications = selectedSuggestions.enumerated().map { offset, suggestion in
+                ApplyDesignSuggestionApplication(
+                    index: offset + 1,
+                    issueKind: suggestion.issueKind,
+                    designID: suggestion.designID,
+                    designName: suggestion.designName,
+                    originalRef: suggestion.ref,
+                    appliedRef: nil,
+                    appliedSelectorKind: nil,
+                    appliedSelectorValue: nil,
+                    property: suggestion.property,
+                    valueType: suggestion.valueType,
+                    valueLabel: suggestion.valueLabel,
+                    changed: nil,
+                    warning: nil,
+                    response: nil,
+                    error: nil
+                )
+            }
+            let result = ApplyDesignSuggestionsResult(
+                host: nil,
+                dryRun: true,
+                compareDesign: options.compareURL.path,
+                referenceSnapshot: options.snapshotURL?.path,
+                outputDirectory: options.outputDirectory.path,
+                selectedSuggestions: selectedSuggestions.count,
+                mutationRequests: 0,
+                changedMutations: 0,
+                failedMutations: 0,
+                beforeSnapshot: nil,
+                afterSnapshot: nil,
+                diff: nil,
+                responses: nil,
+                applications: applications
+            )
+            try writeJSON(result, to: summaryURL)
+            print("apply-design-suggestions dry-run selected=\(selectedSuggestions.count)")
+            print("summary: \(summaryURL.path)")
+            print("selected: \(selectedURL.path)")
+            return
+        }
+
+        let host = try await resolvedRuntimeHost(
+            requestedHost: options.host,
+            hostWasExplicit: options.hostWasExplicit,
+            udid: options.udid,
+            bundleID: options.bundleID
+        )
+        if let udid = options.udid {
+            try await validateRuntimeIdentity(host: host, expectedUDID: udid, timeout: options.timeout)
+        }
+
+        let referenceSnapshot = try options.snapshotURL.map { try decodeSnapshot(from: $0) }
+        var liveSnapshot = try await fetchSnapshot(host: host, timeout: options.timeout)
+        let before = liveSnapshot
+        try writeSnapshot(before, to: beforeURL)
+
+        var applications: [ApplyDesignSuggestionApplication] = []
+        var responses: [LoupeMutationResponse] = []
+        for (offset, suggestion) in selectedSuggestions.enumerated() {
+            var attemptedSelector: LoupeMutationSelector?
+            let baseRequest = LoupeMutationRequest(
+                selector: mutationSelector(for: suggestion),
+                property: suggestion.property,
+                value: suggestion.value,
+                layout: true,
+                animation: nil
+            )
+
+            do {
+                let request: LoupeMutationRequest
+                if let referenceSnapshot {
+                    request = try requestByResolvingMutationSnapshotRef(
+                        baseRequest,
+                        referenceSnapshot: referenceSnapshot,
+                        liveSnapshot: liveSnapshot
+                    )
+                } else {
+                    request = baseRequest
+                }
+                attemptedSelector = request.selector
+
+                let response = try await postMutation(request, host: host, timeout: options.timeout)
+                responses.append(response)
+                let responseURL = options.outputDirectory
+                    .appendingPathComponent("response-\(String(format: "%02d", offset + 1))-\(safeArtifactName(suggestion.property))-\(safeArtifactName(request.selector.value)).json")
+                try writeJSON(response, to: responseURL)
+                applications.append(
+                    ApplyDesignSuggestionApplication(
+                        index: offset + 1,
+                        issueKind: suggestion.issueKind,
+                        designID: suggestion.designID,
+                        designName: suggestion.designName,
+                        originalRef: suggestion.ref,
+                        appliedRef: request.selector.kind == .ref ? request.selector.value : nil,
+                        appliedSelectorKind: request.selector.kind.rawValue,
+                        appliedSelectorValue: request.selector.value,
+                        property: suggestion.property,
+                        valueType: suggestion.valueType,
+                        valueLabel: suggestion.valueLabel,
+                        changed: mutationResponseChanged(response),
+                        warning: response.warning,
+                        response: responseURL.path,
+                        error: nil
+                    )
+                )
+                liveSnapshot = try await fetchSnapshot(host: host, timeout: options.timeout)
+            } catch {
+                applications.append(
+                    ApplyDesignSuggestionApplication(
+                        index: offset + 1,
+                        issueKind: suggestion.issueKind,
+                        designID: suggestion.designID,
+                        designName: suggestion.designName,
+                        originalRef: suggestion.ref,
+                        appliedRef: attemptedSelector?.kind == .ref ? attemptedSelector?.value : nil,
+                        appliedSelectorKind: attemptedSelector?.kind.rawValue,
+                        appliedSelectorValue: attemptedSelector?.value,
+                        property: suggestion.property,
+                        valueType: suggestion.valueType,
+                        valueLabel: suggestion.valueLabel,
+                        changed: nil,
+                        warning: nil,
+                        response: nil,
+                        error: String(describing: error)
+                    )
+                )
+            }
+        }
+
+        let after = try await fetchSnapshot(host: host, timeout: options.timeout)
+        try writeSnapshot(after, to: afterURL)
+        let diff = snapshotDiff(before: before, after: after)
+        try writeJSON(diff, to: diffURL)
+        try writeJSON(responses, to: responsesURL)
+
+        let changedCount = responses.filter { mutationResponseChanged($0) }.count
+        let failedCount = applications.filter { $0.error != nil }.count
+        let result = ApplyDesignSuggestionsResult(
+            host: host.absoluteString,
+            dryRun: false,
+            compareDesign: options.compareURL.path,
+            referenceSnapshot: options.snapshotURL?.path,
+            outputDirectory: options.outputDirectory.path,
+            selectedSuggestions: selectedSuggestions.count,
+            mutationRequests: responses.count,
+            changedMutations: changedCount,
+            failedMutations: failedCount,
+            beforeSnapshot: beforeURL.path,
+            afterSnapshot: afterURL.path,
+            diff: diffURL.path,
+            responses: responsesURL.path,
+            applications: applications
+        )
+        try writeJSON(result, to: summaryURL)
+
+        print("apply-design-suggestions selected=\(selectedSuggestions.count) mutations=\(responses.count) changed=\(changedCount) failed=\(failedCount)")
+        print("summary: \(summaryURL.path)")
+        print("before: \(beforeURL.path)")
+        print("after: \(afterURL.path)")
+        print("responses: \(responsesURL.path)")
+    }
+
+    static func mutationSelector(for suggestion: LoupeDesignMutationSuggestion) -> LoupeMutationSelector {
+        if let testID = suggestion.testID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !testID.isEmpty {
+            return LoupeMutationSelector(kind: .testID, value: testID)
+        }
+        return LoupeMutationSelector(kind: .ref, value: suggestion.ref)
+    }
+
+    static func mutationResponseChanged(_ response: LoupeMutationResponse) -> Bool {
+        if response.changed == true || response.changed == nil {
+            return true
+        }
+        guard let requested = response.requested, let effective = response.effective else {
+            return false
+        }
+        return mutationValuesApproximatelyEqual(requested, effective)
+    }
+
+    static func mutationValuesApproximatelyEqual(_ requested: LoupeMutationValue, _ effective: LoupeMutationValue) -> Bool {
+        switch (requested, effective) {
+        case let (.bool(lhs), .bool(rhs)):
+            return lhs == rhs
+        case let (.int(lhs), .int(rhs)):
+            return lhs == rhs
+        case let (.int(lhs), .double(rhs)):
+            return abs(Double(lhs) - rhs) < 0.5
+        case let (.double(lhs), .int(rhs)):
+            return abs(lhs - Double(rhs)) < 0.5
+        case let (.double(lhs), .double(rhs)):
+            return abs(lhs - rhs) < 0.5
+        case let (.string(lhs), .string(rhs)):
+            return lhs == rhs
+        case let (.color(lhs), .color(rhs)):
+            return abs(lhs.red - rhs.red) < 0.01
+                && abs(lhs.green - rhs.green) < 0.01
+                && abs(lhs.blue - rhs.blue) < 0.01
+                && abs(lhs.alpha - rhs.alpha) < 0.01
+        case let (.point(lhs), .point(rhs)):
+            return abs(lhs.x - rhs.x) < 0.5 && abs(lhs.y - rhs.y) < 0.5
+        case let (.size(lhs), .size(rhs)):
+            return abs(lhs.width - rhs.width) < 0.5 && abs(lhs.height - rhs.height) < 0.5
+        case let (.rect(lhs), .rect(rhs)):
+            return abs(lhs.x - rhs.x) < 0.5
+                && abs(lhs.y - rhs.y) < 0.5
+                && abs(lhs.width - rhs.width) < 0.5
+                && abs(lhs.height - rhs.height) < 0.5
+        default:
+            return false
+        }
+    }
+
+    static func skills(_ arguments: [String]) throws {
         guard let subcommand = arguments.first else {
-            throw CLIError("Usage: loupe skills install [--target all|codex|claude] [--source <skills/loupe>]")
+            throw CLIError("Usage: loupe skills install [--target all|codex|claude] [--source <skill-dir>]")
         }
 
         switch subcommand {
@@ -632,7 +841,7 @@ struct LoupeCLI {
         }
     }
 
-    private static func installSkills(_ arguments: [String]) throws {
+    static func installSkills(_ arguments: [String]) throws {
         let options = try InstallSkillsOptions(arguments)
         let source = try resolvedSkillSource(options.sourceURL)
         let targets = options.target.targets
@@ -660,7 +869,7 @@ struct LoupeCLI {
         }
     }
 
-    private static func cleanup(_ arguments: [String]) async throws {
+    static func cleanup(_ arguments: [String]) async throws {
         let options = try CleanupOptions(arguments)
         var report = CleanupReport()
 
@@ -738,27 +947,16 @@ struct LoupeCLI {
         FileManager.default.temporaryDirectory.appendingPathComponent("loupe-traces", isDirectory: true)
     }
 
-    private static func start(_ arguments: [String]) async throws {
+    static func start(_ arguments: [String]) async throws {
         var launchArguments: [String] = []
         var index = 0
-        var hasInject = false
+        var hasLaunchMode = false
 
         while index < arguments.count {
             let argument = arguments[index]
             switch argument {
-            case "--port":
-                let valueIndex = index + 1
-                guard valueIndex < arguments.count else {
-                    throw CLIError("--port requires a value")
-                }
-                let rawPort = arguments[valueIndex]
-                guard let port = Int(rawPort), (1...65535).contains(port) else {
-                    throw CLIError("--port must be a valid TCP port")
-                }
-                launchArguments.append(contentsOf: ["--env", "LOUPE_PORT=\(port)"])
-                index = valueIndex
-            case "--inject":
-                hasInject = true
+            case "--inject", "--linked", "--no-inject", "--dylib":
+                hasLaunchMode = true
                 launchArguments.append(argument)
             default:
                 launchArguments.append(argument)
@@ -766,37 +964,116 @@ struct LoupeCLI {
             index += 1
         }
 
-        if !hasInject {
+        if !hasLaunchMode {
             launchArguments.append("--inject")
         }
         try await launch(launchArguments)
     }
 
-    private static func launch(_ arguments: [String]) async throws {
+    static func launch(_ arguments: [String]) async throws {
         let options = try LaunchOptions(arguments)
         var environment = options.environment
-        var runtimeUDID: String?
-        var runtimeHost: URL?
+        if let port = options.port {
+            environment["LOUPE_PORT"] = String(port)
+        }
+        if let bindHost = options.bindHost {
+            environment["LOUPE_BIND_HOST"] = bindHost
+        }
+
+        let resolvedSimulatorDevice: String?
+        do {
+            resolvedSimulatorDevice = try resolveSimulatorUDID(options.device)
+        } catch {
+            if options.shouldInject {
+                throw error
+            }
+            guard options.device != "booted" else {
+                throw CLIError(
+                    "No booted simulator matched `booted`. For a physical device, pass --device <device-id> with --linked."
+                )
+            }
+            resolvedSimulatorDevice = nil
+        }
 
         if options.shouldInject, let dylibPath = try resolvedInjectorPath(explicitPath: options.dylibPath) {
             environment["DYLD_INSERT_LIBRARIES"] = dylibPath
-            let udid = try resolveSimulatorUDID(options.device)
+            guard let udid = resolvedSimulatorDevice else {
+                throw CLIError("Loupe injection requires a simulator device. Use --linked for LoupeInjector-linked physical-device apps.")
+            }
             let port = try resolvedLoupePort(for: udid, environment: environment)
             let host = URL(string: "http://127.0.0.1:\(port)")!
             try validateLaunchPort(host: host, expectedUDID: udid, expectedBundleID: options.bundleID)
             environment["LOUPE_PORT"] = String(port)
-            runtimeUDID = udid
-            runtimeHost = host
             try terminateAppIfRunning(
                 device: udid,
                 bundleID: options.bundleID,
                 timeout: simctlTerminateTimeout(launchTimeout: options.timeout)
             )
+
+            try runSimctlLaunch(
+                device: udid,
+                bundleID: options.bundleID,
+                environment: environment,
+                timeout: options.timeout
+            )
+
+            try await waitForRuntime(host: host, expectedUDID: udid, timeout: options.timeout)
+            try storeRuntimeHost(udid: udid, bundleID: options.bundleID, host: host)
+            try storeCurrentRuntimeHost(
+                LoupeRuntimeHostRecord(udid: udid, bundleID: options.bundleID, host: host.absoluteString, updatedAt: Date())
+            )
+            print("loupe host: \(host.absoluteString)")
+            return
         }
 
-        let request = SimctlLaunchRequest(
+        if let resolvedSimulatorDevice {
+            try runSimctlLaunch(
+                device: resolvedSimulatorDevice,
+                bundleID: options.bundleID,
+                environment: environment,
+                timeout: options.timeout
+            )
+            if let host = options.host {
+                try await storeLinkedRuntimeAfterLaunch(
+                    host: host,
+                    expectedDeviceID: resolvedSimulatorDevice,
+                    fallbackDeviceID: resolvedSimulatorDevice,
+                    fallbackBundleID: options.bundleID,
+                    timeout: options.timeout
+                )
+            }
+            return
+        }
+
+        environment["LOUPE_DEVICE_ID"] = environment["LOUPE_DEVICE_ID"] ?? options.device
+        try runDevicectlLaunch(
             device: options.device,
             bundleID: options.bundleID,
+            environment: environment,
+            timeout: options.timeout
+        )
+        if let host = options.host {
+            try await storeLinkedRuntimeAfterLaunch(
+                host: host,
+                expectedDeviceID: environment["LOUPE_DEVICE_ID"],
+                fallbackDeviceID: options.device,
+                fallbackBundleID: options.bundleID,
+                timeout: options.timeout
+            )
+        } else {
+            print("launched linked app on \(options.device)")
+        }
+    }
+
+    private static func runSimctlLaunch(
+        device: String,
+        bundleID: String,
+        environment: [String: String],
+        timeout: TimeInterval
+    ) throws {
+        let request = SimctlLaunchRequest(
+            device: device,
+            bundleID: bundleID,
             environment: environment
         )
 
@@ -805,14 +1082,107 @@ struct LoupeCLI {
         process.arguments = SimctlCommandBuilder.launchArguments(for: request)
         process.environment = SimctlCommandBuilder.launchEnvironment(for: request)
 
-        try run(process, label: "simctl launch", timeout: options.timeout)
+        try run(process, label: "simctl launch", timeout: timeout)
+    }
 
-        if let runtimeUDID, let runtimeHost {
-            try await waitForRuntime(host: runtimeHost, expectedUDID: runtimeUDID, timeout: options.timeout)
-            try storeRuntimeHost(udid: runtimeUDID, bundleID: options.bundleID, host: runtimeHost)
-            try storeCurrentRuntimeHost(LoupeRuntimeHostRecord(udid: runtimeUDID, bundleID: options.bundleID, host: runtimeHost.absoluteString, updatedAt: Date()))
-            print("loupe host: \(runtimeHost.absoluteString)")
+    private static func runDevicectlLaunch(
+        device: String,
+        bundleID: String,
+        environment: [String: String],
+        timeout: TimeInterval
+    ) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        var arguments = [
+            "devicectl",
+            "device",
+            "process",
+            "launch",
+            "--device",
+            device,
+            "--terminate-existing",
+        ]
+        if !environment.isEmpty {
+            let data = try JSONSerialization.data(
+                withJSONObject: environment,
+                options: [.sortedKeys]
+            )
+            guard let json = String(data: data, encoding: .utf8) else {
+                throw CLIError("Could not encode devicectl environment")
+            }
+            arguments.append(contentsOf: ["--environment-variables", json])
         }
+        arguments.append(bundleID)
+        process.arguments = arguments
+
+        try runDevicectlProcess(process, timeout: timeout)
+    }
+
+    private static func runDevicectlProcess(_ process: Process, timeout: TimeInterval) throws {
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        let semaphore = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in
+            semaphore.signal()
+        }
+        try process.run()
+        if semaphore.wait(timeout: .now() + timeout) == .timedOut {
+            process.terminate()
+            throw CLIError("devicectl launch timed out after \(format(timeout))s")
+        }
+
+        let output = String(decoding: outputPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        let error = String(decoding: errorPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        guard process.terminationStatus == 0 else {
+            let details = [error, output]
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+            var message = "devicectl launch exited with status \(process.terminationStatus)"
+            if !details.isEmpty {
+                message += ": \(details)"
+            }
+            if details.contains("CoreDeviceService was unable to locate")
+                || details.contains("The specified device was not found")
+                || details.contains("pairingState: unsupported")
+            {
+                message += "\nHint: this device is not available through CoreDevice/devicectl. For older iOS devices, install and launch a LoupeInjector-linked debug app from Xcode, then select it with `loupe app use --host <runtime-host>`."
+            }
+            if details.contains("Locked")
+                || details.contains("could not be, unlocked")
+                || details.contains("Unable to launch")
+            {
+                message += "\nHint: unlock the physical device and keep it awake, then retry `loupe app launch --linked`."
+            }
+            throw CLIError(message)
+        }
+    }
+
+    private static func storeLinkedRuntimeAfterLaunch(
+        host: URL,
+        expectedDeviceID: String?,
+        fallbackDeviceID: String,
+        fallbackBundleID: String,
+        timeout: TimeInterval
+    ) async throws {
+        try await waitForRuntimeHost(
+            host: host,
+            expectedDeviceID: expectedDeviceID,
+            timeout: timeout
+        )
+        let state = try await fetchRuntimeState(host: host, timeout: min(1, timeout))
+        let record = runtimeHostRecord(
+            state: state,
+            host: host,
+            fallbackDeviceID: fallbackDeviceID,
+            fallbackBundleID: fallbackBundleID
+        )
+        try storeRuntimeHost(record)
+        try storeCurrentRuntimeHost(record)
+        print("loupe host: \(host.absoluteString)")
     }
 
     private static func injectorPath(_ arguments: [String]) throws {
@@ -863,28 +1233,7 @@ struct LoupeCLI {
         return LoupeInjectorPathResolver().resolve()
     }
 
-    private static func fetch(_ arguments: [String]) async throws {
-        let options = try FetchOptions(arguments)
-        let (data, response) = try await httpData(from: options.url, timeout: options.timeout, label: "fetch")
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw CLIError("fetch expected an HTTP response")
-        }
-
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            throw CLIError("fetch failed with HTTP \(httpResponse.statusCode)")
-        }
-
-        if let outputURL = options.outputURL {
-            try data.write(to: outputURL)
-            FileHandle.standardError.write(Data("wrote \(outputURL.path)\n".utf8))
-        } else {
-            FileHandle.standardOutput.write(data)
-            FileHandle.standardOutput.write(Data("\n".utf8))
-        }
-    }
-
-    static let developmentVersion = "0.1.4-dev"
+    static let developmentVersion = "0.1.5-dev"
 
     static func versionString(
         executablePath: String? = Bundle.main.executableURL?.path,
@@ -911,53 +1260,29 @@ struct LoupeCLI {
 
     static func summaryHelp(version: String) -> String {
         """
-        OVERVIEW: A CLI that gives LLM agents runtime UI context from running iOS Simulator apps.
+        OVERVIEW: A CLI that gives agents runtime UI context through small primitives and skill-driven workflows.
 
         VERSION: \(version)
 
-        USAGE: loupe <subcommand>
+        USAGE: loupe <command-group> <subcommand>
 
         OPTIONS:
           -h, --help              Show help information.
           --version               Show the current Loupe version.
 
-        RUNTIME SUBCOMMANDS:
-          start                   Launch and inject an iOS Simulator app.
-          runtimes                List known injected runtimes.
-          use                     Select the current runtime.
-          current                 Show the current runtime selection.
+        COMMAND GROUPS:
+          app                     Launch, select, and inspect app runtimes.
+          ui                      Capture, inspect, audit, and mutate UI state.
+          act                     Dispatch input and wait for UI state.
+          debug                   Read and change diagnostic app state.
+          skills                  Install Loupe workflow skills.
 
-        OBSERVE SUBCOMMANDS:
-          capture-report          Capture screenshot and runtime structure artifacts.
-          screen-map              Print visible semantic and styled elements.
-          tree                    Print view or accessibility trees.
-          inspect                 Inspect one matched node with local context.
-          query                   Query a snapshot by selector.
-          logs                    Fetch app-authored Loupe runtime logs.
-          screenshot              Save a simulator screenshot to a path.
-
-        ACT SUBCOMMANDS:
-          tap                     Tap a selector, ref, or coordinate.
-          swipe, drag             Dispatch one-finger simulator gestures.
-          type                    Type text into the focused field.
-          explore-routes          Probe visible route-like controls.
-          trace-summary           Summarize action trace artifacts.
-          diff                    Compare before/after snapshots.
-
-        MUTATE SUBCOMMANDS:
-          mutations               List supported runtime mutations.
-          set, set-many           Mutate supported UIKit properties.
-          constraints             Inspect captured Auto Layout constraints.
-          set-constraint          Mutate a captured constraint.
-
-        OTHER SUBCOMMANDS:
+        DIAGNOSTICS:
           doctor                  Check local installation health.
           injector-path           Print the resolved injector path.
-          cleanup                 Prune stale runtime records and traces.
-          skills                  Install the Loupe agent skill.
           version                 Show the current Loupe version.
 
-          See 'loupe help <subcommand>' for detailed help.
+          See 'loupe help <command-group> <subcommand>' for detailed help.
         """
     }
 
@@ -979,125 +1304,20 @@ struct LoupeCLI {
         printSummaryHelp()
     }
 
-    private static func printCommandHelp(_ command: String) {
-        if let usage = commandUsage(command) {
+    private static func printCommandHelp(_ path: [String]) {
+        guard !path.isEmpty else {
+            printHelp()
+            return
+        }
+
+        let usageKeys = (1...path.count)
+            .reversed()
+            .map { path.prefix($0).joined(separator: " ") }
+
+        if let usage = usageKeys.lazy.compactMap({ commandUsage($0) }).first {
             print(usage)
         } else {
             printHelp()
-        }
-    }
-
-    static func commandUsage(_ command: String) -> String? {
-        switch command {
-        case "start":
-            return """
-            Usage: loupe start --bundle-id <id> [--device <sim>|--udid <sim>] [--port <port>] [--env KEY=VALUE] [--timeout <seconds>]
-
-            Launch and inject an iOS Simulator app so the in-app Loupe runtime starts.
-            --device and --udid accept a simulator UDID, simulator name, or booted.
-            """
-        case "launch":
-            return """
-            Usage: loupe launch --bundle-id <id> [--device <sim>|--udid <sim>] [--inject] [--dylib <path>] [--env KEY=VALUE] [--timeout <seconds>]
-
-            Launch an iOS Simulator app through simctl. Use --inject to auto-resolve LoupeInjector.
-            """
-        case "set-many":
-            return BatchMutationOptions.usage
-        case "set", "mutate":
-            return MutationSetOptions.usage
-        case "accessibility":
-            return "Usage: loupe accessibility <snapshot.json> [--include-hidden]"
-        case "audit":
-            return AuditOptions.usage
-        case "compact":
-            return "Usage: loupe compact <snapshot.json>"
-        case "capture-report":
-            return "Usage: loupe capture-report [--host <url>] [--udid <sim>] [--bundle-id <id>] --output <dir> [--screen-map-limit <n>] [--timeout <seconds>]"
-        case "compare-design":
-            return "Usage: loupe compare-design <snapshot.json> <design.json> [--json] [--limit <n>] [--frame-tolerance <n>] [--color-tolerance <n>] [--no-unexpected]"
-        case "fetch":
-            return "Usage: loupe fetch <url> [--output <path>] [--timeout <seconds>]"
-        case "runtime":
-            return "Usage: loupe runtime [--host <url>] [--udid <sim>] [--bundle-id <id>] [--output <path>] [--timeout <seconds>]"
-        case "logs":
-            return "Usage: loupe logs [--host <url>] [--udid <sim>] [--bundle-id <id>] [--output <path>]"
-        case "diff":
-            return "Usage: loupe diff <before-snapshot.json> <after-snapshot.json> [--json] [--changed-only] [--limit <n>]"
-        case "reflect":
-            return "Usage: loupe reflect <mutation-response.json> --source <dir> [--output <path>]"
-        case "explore-routes":
-            return "Usage: loupe explore-routes [--host <url>] [--udid <sim>] [--bundle-id <id>] [--limit <n>] [--settle <seconds>] [--back-point x,y] [--trace-dir <dir>] [--output <path>] [--json]"
-        case "trace-summary":
-            return "Usage: loupe trace-summary <trace-dir> [--json] [--limit <n>]"
-        case "tap":
-            return "Usage: loupe tap (--test-id <id> | --ref <ref> | --x <n> --y <n>) --udid <sim> [--host <url>] [--snapshot <snapshot.json>] [--trace-dir <path>] [--expect-visible <testID|text:<text>|exactText:<text>|role:<role>|ref:<ref>>]"
-        case "swipe":
-            return "Usage: loupe swipe --from x,y --to x,y --udid <sim> [--host <url>] [--duration <seconds>] [--no-verify-scroll] [--trace-dir <path>]"
-        case "drag":
-            return "Usage: loupe drag --from x,y --to x,y --udid <sim> [--host <url>] [--duration <seconds>] [--trace-dir <path>]"
-        case "type":
-            return "Usage: loupe type <text> --udid <sim> [--host <url>] [--trace-dir <path>]"
-        case "pinch":
-            return "Usage: loupe pinch --from x,y --start-spread <n> --end-spread <n> --udid <sim> [--host <url>] [--trace-dir <path>]\n\nNote: pinch is reserved but not implemented by the native HID backend yet."
-        case "wait-for-visible":
-            return "Usage: loupe wait-for-visible (--test-id <id> | --ref <ref> | --text <text> | --role <role>) [--host <url>] [--udid <sim>] [--bundle-id <id>] [--output <path>] [--timeout <seconds>]"
-        case "wait-for-gone":
-            return "Usage: loupe wait-for-gone (--test-id <id> | --ref <ref> | --text <text> | --role <role>) [--host <url>] [--udid <sim>] [--bundle-id <id>] [--timeout <seconds>]"
-        case "wait-for-value":
-            return "Usage: loupe wait-for-value (--test-id <id> | --ref <ref>) --key <path> --equals <value> [--host <url>] [--udid <sim>] [--bundle-id <id>] [--output <path>] [--timeout <seconds>]"
-        case "tree":
-            return """
-            Usage: loupe tree [snapshot.json] [--host <url>] [--udid <sim>] [--bundle-id <id>] [--view|--accessibility] [--depth <n>]
-                   loupe tree --interesting|--visible-leaves|--text|--mutable
-
-            Print a human-readable tree. Use --mutable to discover refs likely useful for runtime mutation.
-            """
-        case "query":
-            return "Usage: loupe query [snapshot.json] (--test-id <id> | --text <text> | --exact-text <text> | --role <role> | --ref <ref>) [--host <url>] [--udid <sim>] [--bundle-id <id>] [--tree view|accessibility] [--max-results <n>]"
-        case "inspect":
-            return "Usage: loupe inspect <snapshot.json> (--test-id <id> | --text <text> | --role <role> | --ref <ref>) [--include-hidden] [--fields node,parent,children,siblings]"
-        case "subtree":
-            return "Usage: loupe subtree <snapshot.json> (--test-id <id> | --text <text> | --role <role> | --ref <ref>) [--depth <n>] [--include-hidden]"
-        case "text-map":
-            return "Usage: loupe text-map [snapshot.json] [--host <url>] [--udid <sim>] [--bundle-id <id>] [--accessibility]"
-        case "screen-map":
-            return "Usage: loupe screen-map [snapshot.json] [--host <url>] [--udid <sim>] [--bundle-id <id>] [--include-hidden] [--include-containers] [--limit <n>]"
-        case "runtimes", "apps":
-            return "Usage: loupe runtimes [--json] [--timeout <seconds>]"
-        case "use":
-            return "Usage: loupe use [--host <url>] [--udid <sim>] [--bundle-id <id>] [--timeout <seconds>]"
-        case "mutations":
-            return """
-            Usage: loupe mutations [--host <url>] [--udid <sim>] [--bundle-id <id>]
-                   loupe mutations (--ref <ref> | --text <text> | --test-id <id>)
-
-            List runtime mutation capabilities globally or for one matched node.
-            """
-        case "constraints":
-            return ConstraintListOptions.usage
-        case "set-constraint":
-            return ConstraintMutationOptions.usage(deactivate: false)
-        case "deactivate-constraint":
-            return ConstraintMutationOptions.usage(deactivate: true)
-        case "paint-stack":
-            return "Usage: loupe paint-stack [snapshot.json] (--point x,y | --ref <ref>) [--host <url>] [--udid <sim>] [--bundle-id <id>] [--limit <n>] [--json]"
-        case "screenshot":
-            return "Usage: loupe screenshot --udid <sim> --output <path> [--timeout <seconds>]"
-        case "cleanup":
-            return "Usage: loupe cleanup [--dry-run] [--no-runtimes] [--no-traces] [--traces-older-than <duration>|--all-traces] [--timeout <seconds>]"
-        case "doctor":
-            return "Usage: loupe doctor"
-        case "injector-path":
-            return "Usage: loupe injector-path"
-        case "skills", "install-skills":
-            return "Usage: loupe skills install [--target all|codex|claude] [--source <skills/loupe>]"
-        case "current":
-            return "Usage: loupe current [--json] [--timeout <seconds>]"
-        case "version", "--version":
-            return "Usage: loupe version\n       loupe --version"
-        default:
-            return nil
         }
     }
 
@@ -1135,13 +1355,13 @@ struct LoupeCLI {
         "\(format(color.red)),\(format(color.green)),\(format(color.blue)),\(format(color.alpha))"
     }
 
-    private static func mutations(_ arguments: [String]) async throws {
+    static func mutations(_ arguments: [String]) async throws {
         let options = try MutationListOptions(arguments)
         guard let selector = options.selector else {
             try await runtimeFetch(
                 arguments,
                 path: "/mutations",
-                usage: "loupe mutations [--host <url>] [--udid <sim>] [--bundle-id <id>] [--output <path>]"
+                usage: "loupe ui mutations [--host <url>] [--udid <sim>] [--bundle-id <id>] [--output <path>]"
             )
             return
         }
@@ -1159,7 +1379,12 @@ struct LoupeCLI {
         let matches = LoupeSnapshotQuery.find(
             selector,
             in: snapshot,
-            options: LoupeQueryOptions(includeHidden: options.includeHidden, includeDisabled: true, maxResults: 20)
+            options: LoupeQueryOptions(
+                includeHidden: options.includeHidden,
+                includeDisabled: true,
+                maxResults: 20,
+                visibilityMode: .raw
+            )
         )
         guard let result = matches.first, let node = snapshot.nodes[result.ref] else {
             throw CLIError("No view node matched selector")
@@ -1172,7 +1397,7 @@ struct LoupeCLI {
         }
     }
 
-    private static func constraints(_ arguments: [String]) async throws {
+    static func constraints(_ arguments: [String]) async throws {
         let options = try ConstraintListOptions(arguments)
         let snapshot: LoupeSnapshot
         if let snapshotURL = options.snapshotURL {
@@ -1193,7 +1418,12 @@ struct LoupeCLI {
         let matches = LoupeSnapshotQuery.find(
             options.selector,
             in: snapshot,
-            options: LoupeQueryOptions(includeHidden: options.includeHidden, includeDisabled: true, maxResults: 20)
+            options: LoupeQueryOptions(
+                includeHidden: options.includeHidden,
+                includeDisabled: true,
+                maxResults: 20,
+                visibilityMode: .raw
+            )
         )
         guard let result = matches.first, let node = snapshot.nodes[result.ref] else {
             throw CLIError("No view node matched selector")
@@ -1214,12 +1444,12 @@ struct LoupeCLI {
         }
     }
 
-    private static func set(_ arguments: [String]) async throws {
+    static func set(_ arguments: [String]) async throws {
         if arguments.contains("--list") {
             try await runtimeFetch(
                 arguments.filter { $0 != "--list" },
                 path: "/mutations",
-                usage: "loupe set --list [--host <url>] [--udid <sim>] [--output <path>]"
+                usage: "loupe ui set --list [--host <url>] [--udid <sim>] [--output <path>]"
             )
             return
         }
@@ -1235,9 +1465,22 @@ struct LoupeCLI {
             try await validateRuntimeIdentity(host: host, expectedUDID: udid, timeout: options.timeout)
         }
 
+        let mutationRequest: LoupeMutationRequest
+        if let snapshotURL = options.snapshotURL {
+            let referenceSnapshot = try decodeSnapshot(from: snapshotURL)
+            let liveSnapshot = try await fetchSnapshot(host: host, timeout: options.timeout)
+            mutationRequest = try requestByResolvingMutationSnapshotRef(
+                options.request,
+                referenceSnapshot: referenceSnapshot,
+                liveSnapshot: liveSnapshot
+            )
+        } else {
+            mutationRequest = options.request
+        }
+
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let body = try encoder.encode(options.request)
+        let body = try encoder.encode(mutationRequest)
         var request = URLRequest(url: host.appendingPathComponent("mutate"))
         request.httpMethod = "POST"
         request.timeoutInterval = options.timeout
@@ -1259,7 +1502,110 @@ struct LoupeCLI {
         try write(data: data, outputURL: options.outputURL)
     }
 
-    private static func setMany(_ arguments: [String]) async throws {
+    static func requestByResolvingMutationSnapshotRef(
+        _ request: LoupeMutationRequest,
+        referenceSnapshot: LoupeSnapshot,
+        liveSnapshot: LoupeSnapshot
+    ) throws -> LoupeMutationRequest {
+        guard request.selector.kind == .ref else {
+            return request
+        }
+
+        let referenceRef = request.selector.value
+        guard let referenceNode = referenceSnapshot.nodes[referenceRef] else {
+            throw CLIError("Snapshot does not contain ref \(referenceRef)")
+        }
+
+        if let liveNode = liveSnapshot.nodes[referenceRef],
+           mutationSnapshotRefCandidateScore(reference: referenceNode, candidate: liveNode) != nil {
+            return request
+        }
+
+        let scoredCandidates = liveSnapshot.nodes.values.compactMap { candidate -> (node: LoupeNode, score: Double)? in
+            guard let score = mutationSnapshotRefCandidateScore(reference: referenceNode, candidate: candidate) else {
+                return nil
+            }
+            return (candidate, score)
+        }
+        .sorted { lhs, rhs in
+            if lhs.score != rhs.score {
+                return lhs.score > rhs.score
+            }
+            return lhs.node.ref < rhs.node.ref
+        }
+
+        guard let best = scoredCandidates.first else {
+            throw CLIError("Could not resolve snapshot ref \(referenceRef) in the live runtime; re-query the current screen or use --test-id")
+        }
+        if let second = scoredCandidates.dropFirst().first, abs(best.score - second.score) < 0.001 {
+            throw CLIError("Snapshot ref \(referenceRef) is ambiguous in the live runtime; re-query the current screen or use --test-id")
+        }
+
+        var resolvedRequest = request
+        resolvedRequest.selector = LoupeMutationSelector(kind: .ref, value: best.node.ref)
+        return resolvedRequest
+    }
+
+    private static func mutationSnapshotRefCandidateScore(reference: LoupeNode, candidate: LoupeNode) -> Double? {
+        let referenceClass = reference.uiKit?.className ?? reference.typeName
+        let candidateClass = candidate.uiKit?.className ?? candidate.typeName
+        let referenceText = LoupeObservationCompactor.displayText(for: reference)
+        let candidateText = LoupeObservationCompactor.displayText(for: candidate)
+
+        var score = 0.0
+        if let testID = reference.testID {
+            guard candidate.testID == testID else {
+                return nil
+            }
+            score += 1_000
+        } else {
+            guard reference.typeName == candidate.typeName || referenceClass == candidateClass else {
+                return nil
+            }
+        }
+
+        if reference.typeName == candidate.typeName {
+            score += 120
+        }
+        if referenceClass == candidateClass {
+            score += 120
+        }
+
+        if let referenceRole = reference.role {
+            guard candidate.role == referenceRole else {
+                return nil
+            }
+            score += 80
+        }
+
+        if let referenceText {
+            guard candidateText == referenceText else {
+                return nil
+            }
+            score += 160
+        }
+
+        if let referenceFrame = reference.frame, let candidateFrame = candidate.frame {
+            let delta = abs(referenceFrame.x - candidateFrame.x)
+                + abs(referenceFrame.y - candidateFrame.y)
+                + abs(referenceFrame.width - candidateFrame.width)
+                + abs(referenceFrame.height - candidateFrame.height)
+            guard reference.testID != nil || delta <= 80 else {
+                return nil
+            }
+            score += max(0, 160 - delta)
+        }
+
+        if reference.isInteractive == candidate.isInteractive {
+            score += 20
+        }
+        if reference.isEnabled == candidate.isEnabled {
+            score += 10
+        }
+        return score
+    }
+
+    static func setMany(_ arguments: [String]) async throws {
         let startedAt = Date()
         let options = try BatchMutationOptions(arguments)
         let host = try await resolvedRuntimeHost(
@@ -1277,6 +1623,7 @@ struct LoupeCLI {
         let nextURL = options.traceDirectory.appendingPathComponent("next-snapshot.json")
         let diffURL = options.traceDirectory.appendingPathComponent("diff.json")
         let targetsURL = options.traceDirectory.appendingPathComponent("targets.json")
+        let responsesURL = options.traceDirectory.appendingPathComponent("responses.json")
 
         let before = try await fetchSnapshot(host: host, timeout: options.timeout)
         try writeSnapshot(before, to: prevURL)
@@ -1314,6 +1661,7 @@ struct LoupeCLI {
             )
         }
         try encoder.encode(targets).write(to: targetsURL)
+        try encoder.encode(mutationResponses).write(to: responsesURL)
         let verifiedCells = targets.filter(\.verified).count
         let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
         let result = BatchMutationResult(
@@ -1333,6 +1681,7 @@ struct LoupeCLI {
             nextSnapshot: nextURL.path,
             diff: diffURL.path,
             targets: targetsURL.path,
+            responses: responsesURL.path,
             traceDirectory: options.traceDirectory.path,
         )
         let resultData = try encoder.encode(result)
@@ -1343,7 +1692,7 @@ struct LoupeCLI {
         try write(data: resultData, outputURL: options.outputURL)
     }
 
-    private static func mutateConstraint(_ arguments: [String], deactivate: Bool) async throws {
+    static func mutateConstraint(_ arguments: [String], deactivate: Bool) async throws {
         let options = try ConstraintMutationOptions(arguments, deactivate: deactivate)
         let host = try await resolvedRuntimeHost(
             requestedHost: options.host,
@@ -1375,52 +1724,60 @@ struct LoupeCLI {
         try write(data: data, outputURL: options.outputURL)
     }
 
-    private static func reflect(_ arguments: [String]) throws {
+    static func reflect(_ arguments: [String]) throws {
         let options = try MutationReflectOptions(arguments)
         let data = try Data(contentsOf: options.mutationURL)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let response = try decoder.decode(LoupeMutationResponse.self, from: data)
-        let reflection = mutationReflection(response, sourceRoot: options.sourceRoot)
-
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try write(data: try encoder.encode(reflection), outputURL: options.outputURL)
+
+        if let response = try? decoder.decode(LoupeMutationResponse.self, from: data) {
+            let reflection = mutationReflection(response, sourceRoot: options.sourceRoot)
+            try write(data: try encoder.encode(reflection), outputURL: options.outputURL)
+            return
+        }
+
+        if let responses = try? decoder.decode([LoupeMutationResponse].self, from: data) {
+            let reflections = responses.map { mutationReflection($0, sourceRoot: options.sourceRoot) }
+            try write(data: try encoder.encode(reflections), outputURL: options.outputURL)
+            return
+        }
+
+        if let batch = try? decoder.decode(BatchMutationResult.self, from: data),
+           let responsesPath = batch.responses {
+            let responsesURL = URL(fileURLWithPath: responsesPath)
+            let responsesData = try Data(contentsOf: responsesURL)
+            let responses = try decoder.decode([LoupeMutationResponse].self, from: responsesData)
+            let reflections = responses.map { mutationReflection($0, sourceRoot: options.sourceRoot) }
+            try write(data: try encoder.encode(reflections), outputURL: options.outputURL)
+            return
+        }
+
+        if (try? decoder.decode(BatchMutationResult.self, from: data)) != nil {
+            throw CLIError("reflect cannot read this set-many summary because it does not include mutation responses; rerun set-many with a current loupe build")
+        }
+
+        throw CLIError("reflect expected a mutation response, mutation response array, or set-many summary")
     }
 
-    private static func runtimes(_ arguments: [String]) async throws {
+    static func runtimes(_ arguments: [String]) async throws {
         let options = try RuntimeListOptions(arguments)
         let records = try loadRuntimeHostRecords()
-        var rows: [RuntimeListRow] = []
-
-        for record in records {
-            var live = false
-            var simulator = ""
-            var pid = ""
-            var startedAt = ""
-            var bundleID = record.bundleID
-            if let host = URL(string: record.host),
-               let state = try? await fetchRuntimeState(host: host, timeout: options.timeout) {
-                live = runtimeState(state, matches: record)
-                if live {
-                    simulator = state.identity.simulatorName ?? ""
-                    pid = String(state.identity.processIdentifier)
-                    startedAt = isoString(state.identity.startedAt)
-                    bundleID = state.identity.bundleIdentifier ?? bundleID
+        let rows = await withTaskGroup(of: (Int, RuntimeListRow).self) { group in
+            for (index, record) in records.enumerated() {
+                group.addTask {
+                    (index, await runtimeListRow(for: record, timeout: options.timeout))
                 }
             }
-            rows.append(
-                RuntimeListRow(
-                    udid: record.udid,
-                    simulator: simulator,
-                    bundleID: bundleID,
-                    host: record.host,
-                    pid: pid,
-                    live: live,
-                    startedAt: startedAt,
-                    updatedAt: isoString(record.updatedAt)
-                )
-            )
+
+            var indexedRows: [(Int, RuntimeListRow)] = []
+            for await row in group {
+                indexedRows.append(row)
+            }
+            return indexedRows
+                .sorted { $0.0 < $1.0 }
+                .map(\.1)
         }
 
         if options.json {
@@ -1437,7 +1794,35 @@ struct LoupeCLI {
         }
     }
 
-    private static func screenshot(_ arguments: [String]) throws {
+    private static func runtimeListRow(for record: LoupeRuntimeHostRecord, timeout: TimeInterval) async -> RuntimeListRow {
+        var live = false
+        var simulator = ""
+        var pid = ""
+        var startedAt = ""
+        var bundleID = record.bundleID
+        if let host = URL(string: record.host),
+           let state = try? await fetchRuntimeState(host: host, timeout: timeout) {
+            live = runtimeState(state, matches: record)
+            if live {
+                simulator = state.identity.simulatorName ?? ""
+                pid = String(state.identity.processIdentifier)
+                startedAt = isoString(state.identity.startedAt)
+                bundleID = state.identity.bundleIdentifier ?? bundleID
+            }
+        }
+        return RuntimeListRow(
+            udid: record.udid,
+            simulator: simulator,
+            bundleID: bundleID,
+            host: record.host,
+            pid: pid,
+            live: live,
+            startedAt: startedAt,
+            updatedAt: isoString(record.updatedAt)
+        )
+    }
+
+    static func screenshot(_ arguments: [String]) throws {
         let options = try ScreenshotOptions(arguments)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
@@ -1445,7 +1830,7 @@ struct LoupeCLI {
         try run(process, label: "simctl screenshot", timeout: options.timeout)
     }
 
-    private static func exploreRoutes(_ arguments: [String]) async throws {
+    static func exploreRoutes(_ arguments: [String]) async throws {
         let options = try ExploreRoutesOptions(arguments)
         let host = try await resolvedRuntimeHost(
             requestedHost: options.host,
@@ -1694,7 +2079,7 @@ struct LoupeCLI {
 
     private static func renderExploreRoutesReport(_ report: ExploreRoutesReport) -> String {
         var lines = [
-            "explore-routes host=\(report.host) udid=\(report.udid) screen=\(format(report.screen.size.width))x\(format(report.screen.size.height))",
+            "debug trace explore host=\(report.host) udid=\(report.udid) screen=\(format(report.screen.size.width))x\(format(report.screen.size.height))",
         ]
         if let bundleID = report.bundleID {
             lines[0] += " bundle=\(bundleID)"
@@ -1728,8 +2113,9 @@ struct LoupeCLI {
         return lines.joined(separator: "\n")
     }
 
-    private static func action(command: String, arguments: [String]) async throws {
+    static func action(command: String, arguments: [String]) async throws {
         var options = try ActionOptions(command: command, arguments: arguments)
+        try validateActionBackend(options.backend)
         var target: ActionTarget?
         do {
             if command == "tap",
@@ -1750,7 +2136,20 @@ struct LoupeCLI {
                 hostWasExplicit: options.hostWasExplicit,
                 udid: options.udid
             )
-            try await validateRuntimeIdentity(host: options.host, expectedUDID: options.udid, timeout: options.timeout)
+            let runtimeState = try await fetchRuntimeState(host: options.host, timeout: options.timeout)
+            options.backend = resolvedActionBackend(
+                requested: options.backend,
+                command: command,
+                hostWasExplicit: options.hostWasExplicit,
+                runtimeIdentity: runtimeState.identity
+            )
+            let usesRuntimeActivation = options.backend == "runtime"
+            if usesRuntimeActivation && command != "tap" {
+                throw CLIError("runtime action backend currently supports tap only")
+            }
+            if !usesRuntimeActivation {
+                try validateRuntimeIdentity(state: runtimeState, expectedUDID: options.udid, host: options.host)
+            }
             if let traceDirectory = options.traceDirectory {
                 try prepareTraceDirectory(traceDirectory)
                 try await writePreActionTrace(command: command, options: options, traceDirectory: traceDirectory)
@@ -1771,7 +2170,11 @@ struct LoupeCLI {
                     to: traceDirectory.appendingPathComponent("action-target.json")
                 )
             }
-            try dispatchAction(command: command, options: options, target: resolvedTarget)
+            if usesRuntimeActivation {
+                try await dispatchRuntimeActivation(options: options, target: resolvedTarget)
+            } else {
+                try dispatchAction(command: command, options: options, target: resolvedTarget)
+            }
             try await verifyRuntimeAlive(host: options.host, timeout: options.timeout)
             if let scrollBaseline {
                 try await verifyScrollChanged(scrollBaseline, host: options.host, timeout: options.timeout)
@@ -1824,7 +2227,7 @@ struct LoupeCLI {
         }
     }
 
-    private static func waitFor(_ arguments: [String], mode: WaitMode) async throws {
+    static func waitFor(_ arguments: [String], mode: WaitMode) async throws {
         let options = try WaitForOptions(arguments, mode: mode)
         let host = try await resolvedRuntimeHost(
             requestedHost: options.host,
@@ -1890,7 +2293,7 @@ struct LoupeCLI {
                 }
             case .value:
                 guard let keyPath = options.keyPath, let expectedValue = options.expectedValue else {
-                    throw CLIError("wait-for-value requires --key <path> and --equals <value>")
+                    throw CLIError("act wait value requires --key <path> and --equals <value>")
                 }
                 if let node = firstMatchingNode(options.selector, in: snapshot),
                    let value = jsonValue(in: node, keyPath: keyPath),
@@ -1979,6 +2382,15 @@ struct LoupeCLI {
                     source: .keyboardFocus
                 )
             }
+            if options.command == "press" {
+                let screen = try await resolveActionScreen(options)
+                return ActionTarget(
+                    point: LoupePoint(x: 0, y: 0),
+                    screen: screen.size,
+                    screenScale: screen.scale,
+                    source: .remotePress(button: options.press ?? "unknown")
+                )
+            }
             throw CLIError("\(options.command) requires a selector or coordinates")
         }
 
@@ -1998,12 +2410,15 @@ struct LoupeCLI {
                 timeout: options.timeout
             )
         }
-        let accessibilityMatches = uniqueActionMatches(
-            LoupeAccessibilityTreeQuery.find(
-                selector,
-                in: accessibilityTree,
-                options: LoupeQueryOptions(includeHidden: false, includeDisabled: false, maxResults: 8)
-            )
+        let accessibilityMatches = preferPlatformBackedActionMatches(
+            uniqueActionMatches(
+                LoupeAccessibilityTreeQuery.find(
+                    selector,
+                    in: accessibilityTree,
+                    options: LoupeQueryOptions(includeHidden: false, includeDisabled: false, maxResults: 8)
+                )
+            ),
+            snapshot: snapshot
         )
         if accessibilityMatches.count > 1 {
             throw CLIError("Selector matched multiple accessibility nodes: \(matchSummary(accessibilityMatches))")
@@ -2019,12 +2434,15 @@ struct LoupeCLI {
             )
         }
 
-        let viewMatches = uniqueActionMatches(
-            LoupeSnapshotQuery.find(
-                selector,
-                in: snapshot,
-                options: LoupeQueryOptions(includeHidden: false, includeDisabled: false, maxResults: 8)
-            )
+        let viewMatches = preferPlatformBackedActionMatches(
+            uniqueActionMatches(
+                LoupeSnapshotQuery.find(
+                    selector,
+                    in: snapshot,
+                    options: LoupeQueryOptions(includeHidden: false, includeDisabled: false, maxResults: 8)
+                )
+            ),
+            snapshot: snapshot
         )
         if viewMatches.count > 1 {
             throw CLIError("Selector matched multiple view nodes: \(matchSummary(viewMatches))")
@@ -2078,6 +2496,52 @@ struct LoupeCLI {
         }
     }
 
+    static func preferPlatformBackedActionMatches(
+        _ matches: [LoupeAccessibilityQueryResult],
+        snapshot: LoupeSnapshot
+    ) -> [LoupeAccessibilityQueryResult] {
+        preferPlatformBackedActionMatches(
+            matches,
+            snapshot: snapshot,
+            sourceRef: \.sourceRef,
+            semanticKey: actionSemanticKey
+        )
+    }
+
+    static func preferPlatformBackedActionMatches(
+        _ matches: [LoupeQueryResult],
+        snapshot: LoupeSnapshot
+    ) -> [LoupeQueryResult] {
+        LoupeSnapshotQuery.preferPlatformBackedMatches(matches, in: snapshot)
+    }
+
+    private static func preferPlatformBackedActionMatches<Match>(
+        _ matches: [Match],
+        snapshot: LoupeSnapshot,
+        sourceRef: KeyPath<Match, String>,
+        semanticKey: (Match) -> String
+    ) -> [Match] {
+        let grouped = Dictionary(grouping: matches, by: semanticKey)
+        let keysWithPlatformBackedAlternative = Set(grouped.compactMap { key, group -> String? in
+            let platformBacked = group.filter {
+                !LoupeSnapshotQuery.isSyntheticRegisteredProbeSource($0[keyPath: sourceRef], in: snapshot)
+            }
+            let synthetic = group.count - platformBacked.count
+            if !platformBacked.isEmpty, synthetic > 0 {
+                return key
+            }
+            return nil
+        })
+
+        return matches.filter { match in
+            let key = semanticKey(match)
+            guard keysWithPlatformBackedAlternative.contains(key) else {
+                return true
+            }
+            return !LoupeSnapshotQuery.isSyntheticRegisteredProbeSource(match[keyPath: sourceRef], in: snapshot)
+        }
+    }
+
     private static func actionEquivalenceKey(_ match: LoupeAccessibilityQueryResult) -> String {
         [
             match.role ?? "",
@@ -2093,6 +2557,14 @@ struct LoupeCLI {
             match.testID ?? "",
             match.text ?? "",
             geometryKey(frame: match.frame, activationPoint: nil),
+        ].joined(separator: "|")
+    }
+
+    private static func actionSemanticKey(_ match: LoupeAccessibilityQueryResult) -> String {
+        [
+            match.role ?? "",
+            match.testID ?? "",
+            match.text ?? "",
         ].joined(separator: "|")
     }
 
@@ -2160,6 +2632,29 @@ struct LoupeCLI {
             throw CLIError("mutation failed with HTTP \(httpResponse.statusCode): \(body)")
         }
         return try JSONDecoder().decode(LoupeMutationResponse.self, from: data)
+    }
+
+    private static func postActivation(
+        _ activation: LoupeActivationRequest,
+        host: URL,
+        timeout: TimeInterval
+    ) async throws -> LoupeActivationResponse {
+        let body = try makeLoupeJSONEncoder().encode(activation)
+        var request = URLRequest(url: host.appendingPathComponent("activate"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = timeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+
+        let (data, response) = try await httpData(for: request, timeout: timeout, label: "activation")
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw CLIError("activation expected an HTTP response")
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let body = String(decoding: data, as: UTF8.self)
+            throw CLIError("activation failed with HTTP \(httpResponse.statusCode): \(body)")
+        }
+        return try JSONDecoder().decode(LoupeActivationResponse.self, from: data)
     }
 
     private static func writeSnapshot(_ snapshot: LoupeSnapshot, to url: URL) throws {
@@ -2288,16 +2783,37 @@ struct LoupeCLI {
         return try decoder.decode(LoupeRuntimeState.self, from: data)
     }
 
+    static func resolvedActionBackend(
+        requested: String,
+        command: String,
+        hostWasExplicit: Bool,
+        runtimeIdentity: LoupeRuntimeIdentity
+    ) -> String {
+        guard requested == "auto", command == "tap", hostWasExplicit else {
+            return requested
+        }
+        if let simulatorUDID = runtimeIdentity.simulatorUDID, !simulatorUDID.isEmpty {
+            return "auto"
+        }
+        return "runtime"
+    }
+
     static func validateRuntimeIdentity(host: URL, expectedUDID: String, timeout: TimeInterval = 5) async throws {
-        let expected = try resolvedBackendUDID(expectedUDID)
         let state = try await fetchRuntimeState(host: host, timeout: timeout)
-        guard let actual = state.identity.simulatorUDID, !actual.isEmpty else {
-            throw CLIError("Loupe runtime did not report SIMULATOR_UDID; cannot validate --udid \(expected)")
+        try validateRuntimeIdentity(state: state, expectedUDID: expectedUDID, host: host)
+    }
+
+    static func validateRuntimeIdentity(state: LoupeRuntimeState, expectedUDID: String, host: URL? = nil) throws {
+        let expected = try resolvedBackendUDID(expectedUDID)
+        let actual = state.identity.deviceIdentifier ?? state.identity.simulatorUDID
+        guard let actual, !actual.isEmpty else {
+            throw CLIError("Loupe runtime did not report a simulator or device identifier; cannot validate --udid \(expected)")
         }
         guard actual == expected else {
             let bundle = state.identity.bundleIdentifier ?? "unknown-bundle"
+            let location = host?.absoluteString ?? "selected host"
             throw CLIError(
-                "Loupe runtime at \(host.absoluteString) is \(bundle) on simulator \(actual), not requested --udid \(expected)"
+                "Loupe runtime at \(location) is \(bundle) on device \(actual), not requested --udid \(expected)"
             )
         }
     }
@@ -2313,6 +2829,28 @@ struct LoupeCLI {
         repeat {
             do {
                 try await validateRuntimeIdentity(host: host, expectedUDID: expectedUDID, timeout: min(1, timeout))
+                return
+            } catch {
+                lastError = error
+                try await Task.sleep(nanoseconds: 200_000_000)
+            }
+        } while Date() < deadline
+
+        throw CLIError("Timed out waiting for Loupe runtime at \(host.absoluteString): \(lastError.map(String.init(describing:)) ?? "no response")")
+    }
+
+    private static func waitForRuntimeHost(host: URL, expectedDeviceID: String?, timeout: TimeInterval) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastError: Error?
+
+        repeat {
+            do {
+                let state = try await fetchRuntimeState(host: host, timeout: min(1, timeout))
+                if let expectedDeviceID,
+                   let actual = state.identity.deviceIdentifier ?? state.identity.simulatorUDID,
+                   actual != expectedDeviceID {
+                    throw CLIError("Loupe runtime at \(host.absoluteString) is device \(actual), not requested device \(expectedDeviceID)")
+                }
                 return
             } catch {
                 lastError = error
@@ -2468,7 +3006,7 @@ struct LoupeCLI {
             try await fetchAccessibilityTree(host: options.host, fallbackSnapshot: snapshot, timeout: options.timeout),
             to: traceDirectory.appendingPathComponent("before-accessibility.json")
         )
-        try await writeRuntimeTracePayload(
+        try? await writeRuntimeTracePayload(
             host: options.host,
             path: "logs",
             to: traceDirectory.appendingPathComponent("before-logs.json")
@@ -2481,11 +3019,13 @@ struct LoupeCLI {
             to: traceDirectory.appendingPathComponent("action-before.json")
         )
 
-        let udid = try resolvedBackendUDID(options.udid)
-        try captureSimulatorScreenshot(
-            udid: udid,
-            outputURL: traceDirectory.appendingPathComponent("before.png")
-        )
+        if options.backend != "runtime" {
+            let udid = try resolvedBackendUDID(options.udid)
+            try captureSimulatorScreenshot(
+                udid: udid,
+                outputURL: traceDirectory.appendingPathComponent("before.png")
+            )
+        }
     }
 
     private static func writePostActionTrace(
@@ -2500,7 +3040,7 @@ struct LoupeCLI {
             try await fetchAccessibilityTree(host: options.host, fallbackSnapshot: snapshot, timeout: options.timeout),
             to: traceDirectory.appendingPathComponent("after-accessibility.json")
         )
-        try await writeRuntimeTracePayload(
+        try? await writeRuntimeTracePayload(
             host: options.host,
             path: "logs",
             to: traceDirectory.appendingPathComponent("after-logs.json")
@@ -2513,14 +3053,16 @@ struct LoupeCLI {
             to: traceDirectory.appendingPathComponent("action-after.json")
         )
 
-        let udid = try resolvedBackendUDID(options.udid)
-        let screenshotURL = traceDirectory.appendingPathComponent("after.png")
-        try captureSimulatorScreenshot(udid: udid, outputURL: screenshotURL)
-        try? cropTargetImage(
-            target: target,
-            screenshotURL: screenshotURL,
-            outputURL: traceDirectory.appendingPathComponent("target-crop.png")
-        )
+        if options.backend != "runtime" {
+            let udid = try resolvedBackendUDID(options.udid)
+            let screenshotURL = traceDirectory.appendingPathComponent("after.png")
+            try captureSimulatorScreenshot(udid: udid, outputURL: screenshotURL)
+            try? cropTargetImage(
+                target: target,
+                screenshotURL: screenshotURL,
+                outputURL: traceDirectory.appendingPathComponent("target-crop.png")
+            )
+        }
     }
 
     private static func writeFailureTrace(
@@ -2592,7 +3134,8 @@ struct LoupeCLI {
             point: options.point,
             endPoint: options.endPoint,
             duration: options.duration,
-            text: options.text,
+            text: ActionTraceText.recordable(command: command, text: options.text),
+            press: options.press,
             resolvedPoint: target?.point,
             resolvedScreen: target?.screen,
             resolvedSource: target?.source.description,
@@ -2676,6 +3219,21 @@ struct LoupeCLI {
     }
 
     private static func renderCaptureReportMarkdown(_ report: CaptureReport) -> String {
+        var artifactLines = [
+            "- screenshot: \(report.artifacts.screenshot ?? "unavailable for this runtime")",
+            "- snapshot: \(report.artifacts.snapshot)",
+            "- screen-map: \(report.artifacts.screenMap)",
+            "- accessibility: \(report.artifacts.accessibility)",
+            "- compact: \(report.artifacts.compact)",
+            "- audit: \(report.artifacts.audit)",
+        ]
+        if let runtime = report.artifacts.runtime {
+            artifactLines.append("- runtime: \(runtime)")
+        }
+        if let logs = report.artifacts.logs {
+            artifactLines.append("- logs: \(logs)")
+        }
+
         var lines: [String] = [
             "# Loupe Capture Report",
             "",
@@ -2687,19 +3245,8 @@ struct LoupeCLI {
             "",
             "## Artifacts",
             "",
-            "- screenshot: \(report.artifacts.screenshot)",
-            "- snapshot: \(report.artifacts.snapshot)",
-            "- screen-map: \(report.artifacts.screenMap)",
-            "- accessibility: \(report.artifacts.accessibility)",
-            "- compact: \(report.artifacts.compact)",
-            "- audit: \(report.artifacts.audit)",
         ]
-        if let runtime = report.artifacts.runtime {
-            lines.append("- runtime: \(runtime)")
-        }
-        if let logs = report.artifacts.logs {
-            lines.append("- logs: \(logs)")
-        }
+        lines += artifactLines
         lines += [
             "",
             "## Counts",
@@ -2754,7 +3301,9 @@ struct LoupeCLI {
             "",
             "## Agent Loop",
             "",
-            "Use the screenshot for visual fidelity and the screen-map/audit/accessibility artifacts for structure, semantics, and actionable fixes.",
+            report.artifacts.screenshot == nil
+                ? "Use screen-map/audit/accessibility artifacts for structure, semantics, and actionable fixes. This runtime did not provide a simulator screenshot."
+                : "Use the screenshot for visual fidelity and the screen-map/audit/accessibility artifacts for structure, semantics, and actionable fixes.",
         ]
         return lines.joined(separator: "\n") + "\n"
     }
@@ -2802,8 +3351,9 @@ struct LoupeCLI {
                 &errorMessage
             )
         case "type":
-            try copyTextToSimulatorPasteboard(options.text ?? "", udid: udid)
-            status = LoupeHIDPaste(udid, &errorMessage)
+            status = LoupeHIDType(udid, options.text ?? "", &errorMessage)
+        case "press":
+            status = LoupeHIDPress(udid, options.press ?? "", &errorMessage)
         case "pinch":
             throw CLIError("pinch is not supported by the native HID backend yet")
         default:
@@ -2820,33 +3370,26 @@ struct LoupeCLI {
         }
     }
 
-    private static func copyTextToSimulatorPasteboard(_ text: String, udid: String) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-        process.arguments = ["simctl", "pbcopy", udid]
-        let input = Pipe()
-        let output = Pipe()
-        let error = Pipe()
-        process.standardInput = input
-        process.standardOutput = output
-        process.standardError = error
-
-        let semaphore = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in semaphore.signal() }
-        try process.run()
-        if let data = text.data(using: .utf8) {
-            input.fileHandleForWriting.write(data)
+    private static func dispatchRuntimeActivation(options: ActionOptions, target _: ActionTarget) async throws {
+        guard let selector = options.selector else {
+            throw CLIError("runtime tap requires --test-id or --ref")
         }
-        try input.fileHandleForWriting.close()
+        let request = LoupeActivationRequest(selector: try activationSelector(from: selector))
+        _ = try await postActivation(request, host: options.host, timeout: options.timeout)
+    }
 
-        if semaphore.wait(timeout: .now() + 10) == .timedOut {
-            process.terminate()
-            throw CLIError("simctl pbcopy timed out after 10s")
-        }
-        guard process.terminationStatus == 0 else {
-            let stderr = String(data: error.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            throw CLIError("simctl pbcopy exited with status \(process.terminationStatus)\(stderr.map { ": \($0)" } ?? "")")
+    private static func activationSelector(from selector: LoupeSelector) throws -> LoupeMutationSelector {
+        switch selector {
+        case let .testID(value):
+            return LoupeMutationSelector(kind: .testID, value: value)
+        case let .ref(value):
+            return LoupeMutationSelector(kind: .ref, value: value)
+        case let .role(value):
+            return LoupeMutationSelector(kind: .role, value: value)
+        case let .text(value, exact):
+            return LoupeMutationSelector(kind: .text, value: value, exact: exact)
+        case let .roleAndText(role, text, exact):
+            return LoupeMutationSelector(kind: .roleAndText, value: text, role: role, exact: exact)
         }
     }
 
@@ -2884,8 +3427,8 @@ struct LoupeCLI {
     }
 
     private static func validateActionBackend(_ requested: String) throws {
-        guard requested == "auto" || requested == "native" else {
-            throw CLIError("Unsupported action backend: \(requested). Loupe currently supports native only.")
+        guard requested == "auto" || requested == "native" || requested == "runtime" else {
+            throw CLIError("Unsupported action backend: \(requested). Loupe currently supports native or runtime.")
         }
     }
 
@@ -2910,19 +3453,35 @@ struct LoupeCLI {
             throw CLIError("Could not parse booted simulator list")
         }
 
-        let booted = devicesByRuntime.values
-            .flatMap { $0 }
-            .filter { ($0["state"] as? String) == "Booted" }
+        let booted = Self.preferredBootedDevice(in: devicesByRuntime)
 
-        guard booted.count == 1 else {
-            throw CLIError("Expected exactly one booted simulator, found \(booted.count). Pass --udid <UDID>.")
+        guard let booted else {
+            let count = devicesByRuntime.values.flatMap { $0 }.filter { ($0["state"] as? String) == "Booted" }.count
+            throw CLIError("Expected exactly one booted simulator, or exactly one booted iPhone when multiple platforms are booted. Found \(count). Pass --udid <UDID>.")
         }
 
-        guard let udid = booted[0]["udid"] as? String else {
+        guard let udid = booted["udid"] as? String else {
             throw CLIError("Booted simulator did not include a UDID")
         }
 
         return udid
+    }
+
+    static func preferredBootedDevice(in devicesByRuntime: [String: [[String: Any]]]) -> [String: Any]? {
+        let booted = devicesByRuntime.values
+            .flatMap { $0 }
+            .filter { ($0["state"] as? String) == "Booted" }
+
+        if booted.count == 1 {
+            return booted[0]
+        }
+
+        let bootedPhones = devicesByRuntime
+            .filter { runtime, _ in runtime.contains(".iOS-") || runtime.hasSuffix(".iOS") }
+            .flatMap(\.value)
+            .filter { ($0["state"] as? String) == "Booted" && (($0["name"] as? String)?.contains("iPhone") == true) }
+
+        return bootedPhones.count == 1 ? bootedPhones[0] : nil
     }
 
     private static func resolveSimulatorUDID(_ requested: String) throws -> String {
@@ -3007,11 +3566,46 @@ struct LoupeCLI {
     ) async throws -> (Data, URLResponse) {
         var request = request
         request.timeoutInterval = timeout
+        let timedRequest = request
+        let requestURL = request.url?.absoluteString ?? "unknown-url"
         do {
-            return try await URLSession.shared.data(for: request)
+            return try await withExplicitTimeout(seconds: timeout) {
+                try await URLSession.shared.data(for: timedRequest)
+            }
+        } catch let error as CLIError {
+            throw error
         } catch {
-            throw CLIError("\(label) timed out or failed for \(request.url?.absoluteString ?? "unknown-url"): \(error.localizedDescription)")
+            throw CLIError("\(label) timed out or failed for \(requestURL): \(error.localizedDescription)")
         }
+    }
+
+    private static func withExplicitTimeout<Value: Sendable>(
+        seconds: TimeInterval,
+        operation: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        try await withThrowingTaskGroup(of: Value.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds(seconds))
+                throw CLIError("request timed out after \(format(seconds))s")
+            }
+
+            defer {
+                group.cancelAll()
+            }
+
+            guard let value = try await group.next() else {
+                throw CLIError("request timed out after \(format(seconds))s")
+            }
+            return value
+        }
+    }
+
+    private static func timeoutNanoseconds(_ seconds: TimeInterval) -> UInt64 {
+        let capped = min(max(seconds, 0), Double(UInt64.max) / 1_000_000_000)
+        return UInt64((capped * 1_000_000_000).rounded(.up))
     }
 
     private static func run(_ process: Process, label: String, timeout: TimeInterval = 10) throws {
@@ -3185,6 +3779,8 @@ struct LoupeCLI {
         appendChange("isEnabled", before.isEnabled, after.isEnabled, to: &changes)
         appendChange("isInteractive", before.isInteractive, after.isInteractive, to: &changes)
         appendChange("frame", before.frame.map(rectSummary), after.frame.map(rectSummary), to: &changes)
+        appendChange("uiKit.isFocused", before.uiKit?.isFocused, after.uiKit?.isFocused, to: &changes)
+        appendChange("uiKit.canBecomeFocused", before.uiKit?.canBecomeFocused, after.uiKit?.canBecomeFocused, to: &changes)
         appendChange("style.alpha", before.style?.alpha, after.style?.alpha, to: &changes)
         appendChange("style.backgroundColor", before.style?.backgroundColor.map(colorSummary), after.style?.backgroundColor.map(colorSummary), to: &changes)
         appendChange("style.tintColor", before.style?.tintColor.map(colorSummary), after.style?.tintColor.map(colorSummary), to: &changes)
@@ -3589,9 +4185,20 @@ struct LoupeCLI {
             "set ref=\(response.target.ref)",
             "property=\(response.property)",
             "changed=\(response.changed.map { $0 ? "true" : "false" } ?? "unknown")",
+            response.selfSizingProbe.map { "selfSizing=\(selfSizingProbeSummary($0))" },
             response.warning.map { "warning=\"\($0)\"" },
             outputURL.map { "output=\($0.path)" },
         ].compactMap(\.self).joined(separator: " ")
+    }
+
+    private static func selfSizingProbeSummary(_ probe: LoupeSelfSizingProbeResult) -> String {
+        if probe.attempted {
+            return probe.applied ? "applied" : "failed"
+        }
+        if probe.applied {
+            return "already-enabled"
+        }
+        return "skipped:\(probe.reason ?? "not-applicable")"
     }
 
     private static func renderWaitForValueSummary(
@@ -3601,13 +4208,28 @@ struct LoupeCLI {
         outputURL: URL
     ) -> String {
         [
-            "wait-for-value matched ref=\(node.ref)",
+            "act wait value matched ref=\(node.ref)",
             node.testID.map { "testID=\($0)" },
-            displayText(node).map { "text=\"\($0)\"" },
+            displayText(node).flatMap(waitSummaryText).map { "text=\"\($0)\"" },
             "key=\(keyPath)",
             "value=\(jsonValueSummary(value))",
             "output=\(outputURL.path)",
         ].compactMap(\.self).joined(separator: " ")
+    }
+
+    private static func waitSummaryText(_ text: String) -> String? {
+        let singleLine = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !singleLine.isEmpty else {
+            return nil
+        }
+        let limit = 120
+        guard singleLine.count > limit else {
+            return singleLine
+        }
+        return "\(singleLine.prefix(limit - 1))..."
     }
 
     private static func jsonValueSummary(_ value: Any) -> String {
@@ -3623,7 +4245,13 @@ struct LoupeCLI {
         return String(describing: value)
     }
 
-    private static func renderDesignComparison(_ comparison: LoupeDesignComparison, limit: Int) -> String {
+    private static func renderDesignComparison(
+        _ comparison: LoupeDesignComparison,
+        limit: Int,
+        suggestMutations: Bool = false,
+        snapshotURL: URL? = nil,
+        suggestionHost: URL? = nil
+    ) -> String {
         var lines = [
             "design \(comparison.designFrameName) vs snapshot \(comparison.snapshotID)",
             "matched=\(comparison.matchedCount) issues=\(comparison.issueCount)",
@@ -3649,7 +4277,77 @@ struct LoupeCLI {
             }
         }
 
+        if suggestMutations, !comparison.suggestions.isEmpty {
+            lines.append("")
+            lines.append("suggested mutations:")
+            for suggestion in comparison.suggestions.prefix(limit) {
+                lines.append("  \(renderDesignMutationSuggestion(suggestion, snapshotURL: snapshotURL, host: suggestionHost))")
+                lines.append("    \(suggestion.reason)")
+            }
+        }
+
         return lines.joined(separator: "\n")
+    }
+
+    private static func renderDesignMutationSuggestion(
+        _ suggestion: LoupeDesignMutationSuggestion,
+        snapshotURL: URL?,
+        host: URL?
+    ) -> String {
+        var parts = ["loupe", "ui", "set"]
+        if let host {
+            parts.append("--host")
+            parts.append(host.absoluteString)
+        }
+        if let snapshotURL {
+            parts.append("--snapshot")
+            parts.append(snapshotURL.path)
+        }
+        parts.append("--ref")
+        parts.append(suggestion.ref)
+        parts.append(suggestion.property)
+        parts.append(contentsOf: mutationValueArguments(for: suggestion))
+        parts.append("--no-animate")
+        return parts.map(shellArgument).joined(separator: " ")
+    }
+
+    private static func mutationValueArguments(for suggestion: LoupeDesignMutationSuggestion) -> [String] {
+        switch suggestion.value {
+        case .color:
+            return ["--color", suggestion.valueLabel]
+        case .rect:
+            return ["--rect", suggestion.valueLabel]
+        case .point:
+            return ["--point", suggestion.valueLabel]
+        case .size:
+            return ["--size", suggestion.valueLabel]
+        case .bool:
+            return ["--bool", suggestion.valueLabel]
+        case .int, .double:
+            return ["--number", suggestion.valueLabel]
+        case .string:
+            return ["--string", suggestion.valueLabel]
+        }
+    }
+
+    private static func shellArgument(_ value: String) -> String {
+        guard !value.isEmpty else {
+            return "''"
+        }
+        let safeScalars = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:-=,@")
+        if value.unicodeScalars.allSatisfy({ safeScalars.contains($0) }) {
+            return value
+        }
+        return "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    private static func safeArtifactName(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_-."))
+        let scalars = value.unicodeScalars.map { scalar in
+            allowed.contains(scalar) ? Character(scalar) : "-"
+        }
+        let name = String(scalars).trimmingCharacters(in: CharacterSet(charactersIn: "-."))
+        return name.isEmpty ? "value" : String(name.prefix(80))
     }
 
     private static func resolvedSkillSource(_ explicitSource: URL?) throws -> URL {
@@ -3682,10 +4380,10 @@ struct LoupeCLI {
             }
         }
 
-        throw CLIError("Could not find Loupe skill source. Run from the repo root or pass --source <path-to-skills/loupe>.")
+        throw CLIError("Could not find Loupe skill source. Run from the repo root or pass --source <path-to-skill-dir>.")
     }
 
-    private static func renderViewTree(
+    static func renderViewTree(
         _ snapshot: LoupeSnapshot,
         selector: LoupeSelector?,
         depth: Int?,
@@ -3716,7 +4414,7 @@ struct LoupeCLI {
         }
         var output = lines.joined(separator: "\n")
         if let depth, depth <= 5, visiblePrefixContainsOnlyContainers(roots: roots, snapshot: snapshot, maxDepth: depth, includeHidden: includeHidden) {
-            output += "\n\nhint: Only container nodes found at depth \(depth). Try --depth 8 or `loupe tree --interesting`."
+            output += "\n\nhint: Only container nodes found at depth \(depth). Try --depth 8 or `loupe ui tree --interesting`."
         }
         return output
     }
@@ -3732,15 +4430,16 @@ struct LoupeCLI {
         guard let node = snapshot.nodes[ref] else {
             return
         }
-        if !includeHidden, !node.isVisible {
-            return
+        let shouldRender = includeHidden || node.isVisible
+        if shouldRender {
+            lines.append("\(String(repeating: "  ", count: depth))\(viewTreeLine(node))")
+            guard maxDepth.map({ depth < $0 }) ?? true else {
+                return
+            }
         }
-        lines.append("\(String(repeating: "  ", count: depth))\(viewTreeLine(node))")
-        guard maxDepth.map({ depth < $0 }) ?? true else {
-            return
-        }
+        let childDepth = shouldRender ? depth + 1 : depth
         for child in node.children {
-            appendViewTree(ref: child, snapshot: snapshot, depth: depth + 1, maxDepth: maxDepth, includeHidden: includeHidden, lines: &lines)
+            appendViewTree(ref: child, snapshot: snapshot, depth: childDepth, maxDepth: maxDepth, includeHidden: includeHidden, lines: &lines)
         }
     }
 
@@ -3775,7 +4474,7 @@ struct LoupeCLI {
         }
         var output = lines.joined(separator: "\n")
         if let depth, depth <= 5, accessibilityPrefixContainsOnlyContainers(roots: roots, tree: tree, maxDepth: depth, includeHidden: includeHidden) {
-            output += "\n\nhint: Only container nodes found at depth \(depth). Try --depth 8 or `loupe tree --interesting`."
+            output += "\n\nhint: Only container nodes found at depth \(depth). Try --depth 8 or `loupe ui tree --interesting`."
         }
         return output
     }
@@ -3946,15 +4645,19 @@ struct LoupeCLI {
         includeHidden: Bool,
         nodes: inout [LoupeNode]
     ) {
-        guard let node = snapshot.nodes[ref], includeHidden || node.isVisible else {
+        guard let node = snapshot.nodes[ref] else {
             return
         }
-        nodes.append(node)
-        guard depth < maxDepth else {
-            return
+        let shouldInclude = includeHidden || node.isVisible
+        if shouldInclude {
+            nodes.append(node)
+            guard depth < maxDepth else {
+                return
+            }
         }
+        let childDepth = shouldInclude ? depth + 1 : depth
         for child in node.children {
-            collectViewPrefix(ref: child, snapshot: snapshot, depth: depth + 1, maxDepth: maxDepth, includeHidden: includeHidden, nodes: &nodes)
+            collectViewPrefix(ref: child, snapshot: snapshot, depth: childDepth, maxDepth: maxDepth, includeHidden: includeHidden, nodes: &nodes)
         }
     }
 
@@ -3999,6 +4702,9 @@ struct LoupeCLI {
             node.testID.map { "testID=\($0)" },
             displayText(node).map { "text=\"\($0)\"" },
             node.frame.map { "frame=\(rectSummary($0))" },
+            node.uiKit?.layout.map(layoutSummary),
+            node.uiKit?.isFocused == true ? "focused" : nil,
+            node.uiKit?.canBecomeFocused == true ? "focusable" : nil,
             node.isVisible ? nil : "hidden",
         ].compactMap(\.self).joined(separator: " ")
     }
@@ -4011,12 +4717,26 @@ struct LoupeCLI {
             node.testID.map { "testID=\($0)" },
             LoupeAccessibilityTreeQuery.displayText(for: node).map { "text=\"\($0)\"" },
             node.frame.map { "frame=\(rectSummary($0))" },
+            node.isFocused == true ? "focused" : nil,
+            node.canBecomeFocused == true ? "focusable" : nil,
             node.isVisible ? nil : "hidden",
         ].compactMap(\.self).joined(separator: " ")
     }
 
     private static func rectSummary(_ rect: LoupeRect) -> String {
         "\(format(rect.x)),\(format(rect.y)),\(format(rect.width)),\(format(rect.height))"
+    }
+
+    private static func layoutSummary(_ layout: LoupeUILayoutProperties) -> String {
+        [
+            "ambiguousLayout=\(layout.isAmbiguousLayout)",
+            "hugging=\(priorityPair(layout.hugging))",
+            "compression=\(priorityPair(layout.compressionResistance))",
+        ].joined(separator: " ")
+    }
+
+    private static func priorityPair(_ priorities: LoupeUILayoutPriorities) -> String {
+        "\(format(priorities.horizontal))/\(format(priorities.vertical))"
     }
 
     private static func displayText(_ node: LoupeNode) -> String? {
@@ -4055,13 +4775,25 @@ struct LoupeCLI {
             "layout.compressionResistance.vertical",
         ]
 
-        if isTextBacked(node) {
-            properties += ["text", "textColor", "fontSize", "textAlignment", "lineBreakMode"]
+        if supportsTextMutation(node) {
+            properties += ["text"]
         }
-        if node.uiKit?.label != nil || node.role == "staticText" {
+        if supportsTextColorMutation(node) {
+            properties += ["textColor"]
+        }
+        if supportsFontSizeMutation(node) {
+            properties += ["fontSize"]
+        }
+        if supportsTextAlignmentMutation(node) {
+            properties += ["textAlignment"]
+        }
+        if supportsLineBreakModeMutation(node) {
+            properties += ["lineBreakMode"]
+        }
+        if supportsUILabelSpecificMutations(node) {
             properties += ["numberOfLines", "adjustsFontSizeToFitWidth", "minimumScaleFactor"]
         }
-        if node.uiKit?.textField != nil || node.role == "textField" {
+        if supportsUITextFieldSpecificMutations(node) {
             properties += ["placeholder", "secureTextEntry"]
         }
         if node.uiKit?.button != nil || node.role == "button" {
@@ -4187,8 +4919,51 @@ struct LoupeCLI {
         ].joined(separator: "|")
     }
 
+    private static func supportsTextMutation(_ node: LoupeNode) -> Bool {
+        isTextBacked(node)
+    }
+
+    private static func supportsTextColorMutation(_ node: LoupeNode) -> Bool {
+        node.uiKit?.label != nil
+            || node.uiKit?.textField != nil
+            || node.uiKit?.textView != nil
+            || (node.uiKit?.button != nil && isLikelyUIKitClass(node))
+    }
+
+    private static func supportsFontSizeMutation(_ node: LoupeNode) -> Bool {
+        node.uiKit?.label != nil
+            || node.uiKit?.button != nil
+            || node.uiKit?.textField != nil
+            || node.uiKit?.textView != nil
+    }
+
+    private static func supportsTextAlignmentMutation(_ node: LoupeNode) -> Bool {
+        isLikelyUIKitClass(node)
+            && (node.uiKit?.label != nil || node.uiKit?.textField != nil || node.uiKit?.textView != nil)
+    }
+
+    private static func supportsLineBreakModeMutation(_ node: LoupeNode) -> Bool {
+        isLikelyUIKitClass(node)
+            && (node.uiKit?.label != nil || node.uiKit?.button != nil)
+    }
+
+    private static func supportsUILabelSpecificMutations(_ node: LoupeNode) -> Bool {
+        isLikelyUIKitClass(node) && node.uiKit?.label != nil
+    }
+
+    private static func supportsUITextFieldSpecificMutations(_ node: LoupeNode) -> Bool {
+        isLikelyUIKitClass(node) && node.uiKit?.textField != nil
+    }
+
+    private static func isLikelyUIKitClass(_ node: LoupeNode) -> Bool {
+        let className = node.uiKit?.className ?? node.typeName
+        return className.hasPrefix("UI")
+            || className.hasPrefix("_UI")
+            || className.contains(".UI")
+    }
+
     private static func unsupportedMutationExamples(for node: LoupeNode) -> [String] {
-        if isTextBacked(node) {
+        if supportsTextMutation(node) {
             return []
         }
         return ["text"]
@@ -4201,7 +4976,7 @@ struct LoupeCLI {
             || node.uiKit?.textView != nil
     }
 
-    private static func renderNodeMutationCapabilities(_ node: LoupeNode) -> String {
+    static func renderNodeMutationCapabilities(_ node: LoupeNode) -> String {
         let supported = supportedMutationProperties(for: node)
         let unsupported = unsupportedMutationExamples(for: node)
         var lines = [
@@ -4211,7 +4986,7 @@ struct LoupeCLI {
         if !unsupported.isEmpty {
             lines.append("unsupported: \(unsupported.joined(separator: ", "))")
         }
-        if !isTextBacked(node), displayText(node) != nil {
+        if !supportsTextMutation(node), displayText(node) != nil {
             lines.append("hint: visible text is semantic/accessibility text; mutate accessibility.label or inspect the source view instead of text.")
         }
         return lines.joined(separator: "\n")
@@ -4279,8 +5054,12 @@ struct LoupeCLI {
     ) -> LoupeMutationReflection {
         let testID = response.after.testID ?? response.target.testID ?? mutationSelectorTestID(response.selector)
         let hierarchy = response.hierarchy ?? mutationHierarchyContext(response)
-        let sourceTerms = mutationSourceTerms(response: response, hierarchy: hierarchy, testID: testID)
-        let candidates = sourceCandidates(matchingAny: sourceTerms, under: sourceRoot)
+        let candidates = sourceCandidates(
+            for: response,
+            hierarchy: hierarchy,
+            testID: testID,
+            under: sourceRoot
+        )
         return LoupeMutationReflection(
             selector: response.selector,
             property: response.property,
@@ -4299,44 +5078,40 @@ struct LoupeCLI {
         selector.kind == .testID ? selector.value : nil
     }
 
-    private static func mutationSourceTerms(
-        response: LoupeMutationResponse,
+    private struct RankedMutationSourceCandidate {
+        var score: Int
+        var candidate: LoupeMutationSourceCandidate
+    }
+
+    private static func sourceCandidates(
+        for response: LoupeMutationResponse,
         hierarchy: LoupeMutationHierarchyContext,
-        testID: String?
-    ) -> [String] {
-        var terms: [String] = []
-        appendSourceTerm(testID, to: &terms)
-        if response.property == "text", let beforeText = response.before.text, !beforeText.isEmpty {
-            appendSourceTerm(beforeText, to: &terms)
+        testID: String?,
+        under sourceRoot: URL
+    ) -> [LoupeMutationSourceCandidate] {
+        if let testID {
+            let customTypes = mutationCustomTypeTerms(from: hierarchy)
+            let viewTypes = mutationTargetViewTypeTerms(from: hierarchy)
+            let testIDCandidates = sourceCandidates(
+                matching: testID,
+                customTypes: customTypes,
+                viewTypes: viewTypes,
+                under: sourceRoot
+            )
+            if !testIDCandidates.isEmpty {
+                return testIDCandidates
+            }
         }
-        appendSourceTerm(response.after.uiKit?.className, to: &terms)
-        appendSourceTerm(response.after.typeName, to: &terms)
-        appendSourceTerm(hierarchy.target.typeName, to: &terms)
-        appendSourceTerm(hierarchy.parent?.typeName, to: &terms)
-        for child in hierarchy.children {
-            appendSourceTerm(child.typeName, to: &terms)
-        }
-        return terms
+
+        return hierarchySourceCandidates(response: response, hierarchy: hierarchy, under: sourceRoot)
     }
 
-    private static func appendSourceTerm(_ term: String?, to terms: inout [String]) {
-        guard let term, isUsefulSourceTerm(term), !terms.contains(term) else {
-            return
-        }
-        terms.append(term)
-    }
-
-    private static func isUsefulSourceTerm(_ term: String) -> Bool {
-        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count >= 3 else {
-            return false
-        }
-        return true
-    }
-
-    private static func sourceCandidates(matchingAny terms: [String], under sourceRoot: URL) -> [LoupeMutationSourceCandidate] {
-        let terms = terms.filter { !$0.isEmpty }
-        guard !terms.isEmpty else { return [] }
+    private static func sourceCandidates(
+        matching testID: String,
+        customTypes: [String],
+        viewTypes: [String],
+        under sourceRoot: URL
+    ) -> [LoupeMutationSourceCandidate] {
         guard let enumerator = FileManager.default.enumerator(
             at: sourceRoot,
             includingPropertiesForKeys: [.isRegularFileKey],
@@ -4345,7 +5120,7 @@ struct LoupeCLI {
             return []
         }
 
-        var candidates: [LoupeMutationSourceCandidate] = []
+        var candidates: [RankedMutationSourceCandidate] = []
         for case let url as URL in enumerator {
             guard isSearchableSource(url),
                   let values = try? url.resourceValues(forKeys: [.isRegularFileKey]),
@@ -4353,25 +5128,443 @@ struct LoupeCLI {
                   let text = try? String(contentsOf: url, encoding: .utf8) else {
                 continue
             }
+            let fileScore = mutationSourceFileScore(url: url, text: text, customTypes: customTypes, viewTypes: viewTypes)
             for (offset, line) in text.components(separatedBy: .newlines).enumerated()
-                where terms.contains(where: { line.contains($0) }) {
+                where line.contains(testID) {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
                 candidates.append(
-                    LoupeMutationSourceCandidate(
-                        path: url.path,
-                        line: offset + 1,
-                        text: line.trimmingCharacters(in: .whitespaces)
+                    RankedMutationSourceCandidate(
+                        score: fileScore + mutationTestIDSourceLineScore(
+                            trimmed,
+                            testID: testID,
+                            customTypes: customTypes,
+                            viewTypes: viewTypes
+                        ),
+                        candidate: LoupeMutationSourceCandidate(
+                            path: url.path,
+                            line: offset + 1,
+                            text: trimmed
+                        )
                     )
                 )
             }
         }
 
-        let uniqueCandidates = Dictionary(grouping: candidates, by: { "\($0.path):\($0.line)" })
-            .values
-            .compactMap(\.first)
-        return uniqueCandidates.sorted {
-            if $0.path != $1.path { return $0.path < $1.path }
-            return $0.line < $1.line
+        return candidates.sorted {
+            if $0.score != $1.score { return $0.score > $1.score }
+            if $0.candidate.path != $1.candidate.path { return $0.candidate.path < $1.candidate.path }
+            return $0.candidate.line < $1.candidate.line
+        }.prefix(12).map(\.candidate)
+    }
+
+    private static func hierarchySourceCandidates(
+        response: LoupeMutationResponse,
+        hierarchy: LoupeMutationHierarchyContext,
+        under sourceRoot: URL
+    ) -> [LoupeMutationSourceCandidate] {
+        let customTypes = mutationCustomTypeTerms(from: hierarchy)
+        let viewTypes = mutationTargetViewTypeTerms(from: hierarchy)
+        let propertyTerms = mutationPropertySourceTerms(response.property)
+        let literalTerms = mutationLiteralSourceTerms(from: hierarchy)
+        guard !customTypes.isEmpty || !propertyTerms.isEmpty else {
+            return []
         }
+        if customTypes.isEmpty,
+           literalTerms.isEmpty,
+           isWeakStandaloneMutationProperty(response.property) {
+            return []
+        }
+        guard let enumerator = FileManager.default.enumerator(
+            at: sourceRoot,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else {
+            return []
+        }
+
+        var ranked: [String: RankedMutationSourceCandidate] = [:]
+        for case let url as URL in enumerator {
+            guard isSearchableSource(url),
+                  let values = try? url.resourceValues(forKeys: [.isRegularFileKey]),
+                  values.isRegularFile == true,
+                  let text = try? String(contentsOf: url, encoding: .utf8) else {
+                continue
+            }
+            let fileScore = mutationSourceFileScore(url: url, text: text, customTypes: customTypes, viewTypes: viewTypes)
+            guard fileScore > 0 || customTypes.isEmpty else {
+                continue
+            }
+
+            for (offset, line) in text.components(separatedBy: .newlines).enumerated() {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.isEmpty else {
+                    continue
+                }
+                var score = fileScore
+                let hasProperty = containsAnySourceTerm(trimmed, terms: propertyTerms)
+                let hasCustomType = containsAnySourceTerm(trimmed, terms: customTypes)
+                let hasViewType = containsAnySourceTerm(trimmed, terms: viewTypes)
+                let hasLiteral = containsAny(trimmed, terms: literalTerms)
+                if trimmed.hasPrefix("//"), !hasProperty {
+                    continue
+                }
+                guard hasProperty || hasCustomType || hasViewType || hasLiteral else {
+                    continue
+                }
+                if hasProperty { score += 60 }
+                if hasCustomType { score += 25 }
+                if hasViewType { score += 15 }
+                if hasLiteral { score += mutationLiteralSourceLineScore(trimmed, hierarchy: hierarchy) }
+                guard score >= 35 else {
+                    continue
+                }
+
+                let candidate = LoupeMutationSourceCandidate(
+                    path: url.path,
+                    line: offset + 1,
+                    text: trimmed
+                )
+                let key = "\(candidate.path):\(candidate.line)"
+                if let existing = ranked[key], existing.score >= score {
+                    continue
+                }
+                ranked[key] = RankedMutationSourceCandidate(score: score, candidate: candidate)
+            }
+        }
+
+        return ranked.values.sorted {
+            if $0.score != $1.score { return $0.score > $1.score }
+            if $0.candidate.path != $1.candidate.path { return $0.candidate.path < $1.candidate.path }
+            return $0.candidate.line < $1.candidate.line
+        }.prefix(12).map(\.candidate)
+    }
+
+    private static func mutationSourceFileScore(
+        url: URL,
+        text: String,
+        customTypes: [String],
+        viewTypes: [String]
+    ) -> Int {
+        let fileName = url.deletingPathExtension().lastPathComponent
+        var score = 0
+        for type in customTypes {
+            if fileName.caseInsensitiveCompare(type) == .orderedSame {
+                score += 80
+            } else if sourceTermMatches(fileName, term: type) {
+                score += 40
+            }
+            if text.localizedCaseInsensitiveContains("class \(type)")
+                || text.localizedCaseInsensitiveContains("struct \(type)")
+                || text.localizedCaseInsensitiveContains("final class \(type)") {
+                score += 70
+            } else if containsAnySourceTerm(text, terms: [type]) {
+                score += 15
+            }
+        }
+        for type in viewTypes where !customTypes.contains(type) {
+            if containsAnySourceTerm(text, terms: [type]) {
+                score += 3
+            }
+        }
+        return score
+    }
+
+    private static func mutationLiteralSourceLineScore(
+        _ line: String,
+        hierarchy: LoupeMutationHierarchyContext
+    ) -> Int {
+        var score = 20
+        if line.localizedCaseInsensitiveContains("Text(")
+            || line.localizedCaseInsensitiveContains("Label(")
+            || line.localizedCaseInsensitiveContains("Button(")
+            || line.localizedCaseInsensitiveContains("TextField(")
+            || line.localizedCaseInsensitiveContains("SecureField(")
+            || line.localizedCaseInsensitiveContains(".navigationTitle")
+            || line.localizedCaseInsensitiveContains(".tabItem")
+            || line.localizedCaseInsensitiveContains("accessibilityLabel") {
+            score += 25
+        }
+        if hierarchy.parent?.typeName.localizedCaseInsensitiveContains("NavigationBar") == true
+            && line.localizedCaseInsensitiveContains(".navigationTitle") {
+            score += 35
+        }
+        return score
+    }
+
+    private static func mutationTestIDSourceLineScore(
+        _ line: String,
+        testID: String,
+        customTypes: [String],
+        viewTypes: [String]
+    ) -> Int {
+        var score = 20
+        if line.contains("\"\(testID)\"") || line.contains("'\(testID)'") {
+            score += 35
+        }
+        if line.localizedCaseInsensitiveContains("accessibilityIdentifier")
+            || line.localizedCaseInsensitiveContains("NSUserInterfaceItemIdentifier")
+            || line.localizedCaseInsensitiveContains(".identifier") {
+            score += 65
+        }
+        if line.localizedCaseInsensitiveContains("class \(testID)")
+            || line.localizedCaseInsensitiveContains("struct \(testID)")
+            || line.localizedCaseInsensitiveContains("final class \(testID)") {
+            score += 60
+        }
+        if line.localizedCaseInsensitiveContains("\(testID)(") {
+            score += 45
+        }
+        if containsAnySourceTerm(line, terms: customTypes) {
+            score += 20
+        }
+        if containsAnySourceTerm(line, terms: viewTypes) {
+            score += 10
+        }
+        if line.localizedCaseInsensitiveContains("#selector")
+            || line.localizedCaseInsensitiveContains("NotificationCenter.default.publisher") {
+            score -= 25
+        }
+        return score
+    }
+
+    private static func mutationCustomTypeTerms(from hierarchy: LoupeMutationHierarchyContext) -> [String] {
+        mutationHierarchyTypeTerms(from: hierarchy).filter(isSpecificMutationSourceType)
+    }
+
+    private static func mutationHierarchyTypeTerms(from hierarchy: LoupeMutationHierarchyContext) -> [String] {
+        var terms: [String?] = [
+            hierarchy.parent?.typeName,
+            hierarchy.target.typeName,
+        ]
+        terms.append(contentsOf: (hierarchy.ancestors ?? []).map(\.typeName))
+        terms.append(contentsOf: hierarchy.siblings.map(\.typeName))
+        terms.append(contentsOf: hierarchy.children.map(\.typeName))
+        return uniqueSourceTerms(terms)
+    }
+
+    private static func mutationTargetViewTypeTerms(from hierarchy: LoupeMutationHierarchyContext) -> [String] {
+        uniqueSourceTerms([hierarchy.target.typeName])
+    }
+
+    private static func mutationPropertySourceTerms(_ property: String) -> [String] {
+        let base = property.split(separator: ".").last.map(String.init) ?? property
+        let terms: [String]
+        switch property {
+        case "textColor":
+            terms = ["textColor", "foregroundColor"]
+        case "backgroundColor":
+            terms = ["backgroundColor"]
+        case "tintColor":
+            terms = ["tintColor"]
+        case "cornerRadius":
+            terms = ["cornerRadius", "layer.cornerRadius"]
+        case "borderWidth":
+            terms = ["borderWidth", "layer.borderWidth"]
+        case "borderColor":
+            terms = ["borderColor", "layer.borderColor"]
+        case "fontSize":
+            terms = ["font", "pointSize", "systemFont"]
+        default:
+            if property.hasPrefix("layout.") {
+                terms = [base, "constraint", "NSLayoutConstraint", "contentHuggingPriority", "compressionResistancePriority"]
+            } else {
+                terms = [property, base]
+            }
+        }
+        return uniqueSourceTerms(terms)
+    }
+
+    private static func isWeakStandaloneMutationProperty(_ property: String) -> Bool {
+        let normalized = property.lowercased()
+        return weakStandaloneMutationProperties.contains(normalized)
+            || normalized.hasPrefix("layout.")
+    }
+
+    private static func mutationLiteralSourceTerms(from hierarchy: LoupeMutationHierarchyContext) -> [String] {
+        var terms: [String?] = [
+            hierarchy.target.testID,
+            hierarchy.target.text,
+            hierarchy.parent?.testID,
+            hierarchy.parent?.text,
+        ]
+        terms.append(contentsOf: (hierarchy.ancestors ?? []).flatMap { [$0.testID, $0.text] })
+        return uniqueLiteralTerms(terms)
+    }
+
+    private static let genericUIKitTypeNames: Set<String> = [
+        "NSObject",
+        "UIResponder",
+        "UIApplication",
+        "UIWindow",
+        "UIView",
+        "UIControl",
+        "UILabel",
+        "UIImageView",
+        "UIButton",
+        "UITextField",
+        "UITextView",
+        "UISwitch",
+        "UISlider",
+        "UIScrollView",
+        "UICollectionView",
+        "UICollectionViewCell",
+        "UITableView",
+        "UITableViewCell",
+        "UIStackView",
+        "UIVisualEffectView",
+        "NSView",
+        "NSControl",
+        "NSTextField",
+        "NSButton",
+        "NSScrollView",
+        "NSCollectionView",
+        "NSTableView",
+    ]
+
+    private static let genericSwiftUIRuntimeTypeNames: Set<String> = [
+        "AnyView",
+        "CellHostingView",
+        "CollectionViewCellModifier",
+        "CollectionViewListDataSource",
+        "CoreInteractionRepresentableAdaptor",
+        "EmptyModifier",
+        "HostingView",
+        "ListRepresentable",
+        "ModifiedContent",
+        "PlatformViewControllerRepresentableAdaptor",
+        "PresentationHostingController",
+        "RootModifier",
+        "ScrollPocketElementInteractionRepresentable",
+        "SelectionManagerBox",
+        "TupleView",
+        "UIKitAdaptableTabView",
+        "UIKitPlatformViewHost",
+        "ViewModifier_Content",
+        "_ConditionalContent",
+        "_FrameLayout",
+        "_TraitWritingModifier",
+        "_ViewList_View",
+    ]
+
+    private static let weakStandaloneMutationProperties: Set<String> = [
+        "alpha",
+        "bounces",
+        "bounds",
+        "center",
+        "contentinset",
+        "contentoffset",
+        "contentsize",
+        "enabled",
+        "frame",
+        "hidden",
+        "layer.opacity",
+        "layer.zposition",
+    ]
+
+    private static func isSpecificMutationSourceType(_ term: String) -> Bool {
+        !genericUIKitTypeNames.contains(term)
+            && !genericSwiftUIRuntimeTypeNames.contains(term)
+            && !term.hasPrefix("_")
+    }
+
+    private static func uniqueSourceTerms(_ terms: [String?]) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for raw in terms {
+            for term in normalizedSourceTerms(raw) {
+                let key = term.lowercased()
+                if seen.insert(key).inserted {
+                    result.append(term)
+                }
+            }
+        }
+        return result
+    }
+
+    private static func uniqueLiteralTerms(_ terms: [String?]) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for raw in terms {
+            guard let term = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  term.count >= 3,
+                  term.count <= 80 else {
+                continue
+            }
+            let key = term.lowercased()
+            if seen.insert(key).inserted {
+                result.append(term)
+            }
+        }
+        return result
+    }
+
+    private static func normalizedSourceTerms(_ raw: String?) -> [String] {
+        guard let raw else {
+            return []
+        }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return []
+        }
+
+        if let directTerm = normalizedSimpleSourceTerm(trimmed) {
+            return [directTerm]
+        }
+
+        var terms: [String] = []
+        var seen: Set<String> = []
+        let tokens = trimmed.split { !isSourceIdentifierCharacter($0) }
+        for token in tokens {
+            guard let term = normalizedSimpleSourceTerm(String(token)) else {
+                continue
+            }
+            let key = term.lowercased()
+            if seen.insert(key).inserted {
+                terms.append(term)
+            }
+        }
+        return terms
+    }
+
+    private static func normalizedSimpleSourceTerm(_ raw: String) -> String? {
+        let leaf = raw.split(separator: ".").last.map(String.init) ?? raw
+        guard leaf.count >= 2, leaf.allSatisfy({ isSourceIdentifierCharacter($0) }) else {
+            return nil
+        }
+        return leaf
+    }
+
+    private static func containsAny(_ value: String, terms: [String]) -> Bool {
+        terms.contains { value.localizedCaseInsensitiveContains($0) }
+    }
+
+    private static func containsAnySourceTerm(_ value: String, terms: [String]) -> Bool {
+        terms.contains { sourceTermMatches(value, term: $0) }
+    }
+
+    private static func sourceTermMatches(_ value: String, term: String) -> Bool {
+        if term.contains(where: { !$0.isLetter && !$0.isNumber && $0 != "_" }) {
+            return value.localizedCaseInsensitiveContains(term)
+        }
+
+        let lowerValue = value.lowercased()
+        let lowerTerm = term.lowercased()
+        var searchStart = lowerValue.startIndex
+        while let range = lowerValue.range(of: lowerTerm, range: searchStart..<lowerValue.endIndex) {
+            let beforeOK = range.lowerBound == lowerValue.startIndex
+                || !isSourceIdentifierCharacter(lowerValue[lowerValue.index(before: range.lowerBound)])
+            let afterOK = range.upperBound == lowerValue.endIndex
+                || !isSourceIdentifierCharacter(lowerValue[range.upperBound])
+            if beforeOK && afterOK {
+                return true
+            }
+            searchStart = range.upperBound
+        }
+        return false
+    }
+
+    private static func isSourceIdentifierCharacter(_ character: Character) -> Bool {
+        character == "_" || character.isLetter || character.isNumber
     }
 
     private static func isSearchableSource(_ url: URL) -> Bool {

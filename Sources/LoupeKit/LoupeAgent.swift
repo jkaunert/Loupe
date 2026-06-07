@@ -1,51 +1,11 @@
 import Foundation
 import LoupeCore
 
-#if canImport(UIKit)
-import ObjectiveC
+#if canImport(UIKit) && !os(watchOS)
 import UIKit
 #if canImport(WebKit)
 import WebKit
 #endif
-
-private nonisolated(unsafe) var loupeMetadataKey: UInt8 = 0
-
-public extension UIView {
-    var loupeMetadata: [String: LoupeMetadataValue] {
-        get {
-            objc_getAssociatedObject(self, &loupeMetadataKey) as? [String: LoupeMetadataValue] ?? [:]
-        }
-        set {
-            objc_setAssociatedObject(
-                self,
-                &loupeMetadataKey,
-                newValue,
-                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
-            )
-        }
-    }
-
-    func testID(_ id: String) {
-        accessibilityIdentifier = id
-        loupeMetadata["id"] = .string(id)
-    }
-
-    func testProperty(_ key: String, _ value: String) {
-        loupeMetadata[key] = .string(value)
-    }
-
-    func testProperty(_ key: String, _ value: Bool) {
-        loupeMetadata[key] = .bool(value)
-    }
-
-    func testProperty(_ key: String, _ value: Int) {
-        loupeMetadata[key] = .int(value)
-    }
-
-    func testProperty(_ key: String, _ value: Double) {
-        loupeMetadata[key] = .double(value)
-    }
-}
 
 @MainActor
 public final class LoupeAgent {
@@ -68,14 +28,22 @@ public final class LoupeAgent {
         return captureNativeAccessibilityTree(snapshot: capture.snapshot, viewRefs: capture.viewRefs)
     }
 
-    private func captureSnapshotWithViewRefs() -> CapturedSnapshot {
+    func captureSnapshotWithViewRefs() -> CapturedSnapshot {
         nextRef = 0
 
         var nodes: [String: LoupeNode] = [:]
         var viewRefs: [ObjectIdentifier: String] = [:]
         var viewsByRef: [String: UIView] = [:]
+        #if os(visionOS)
+        let screenBounds = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.coordinateSpace.bounds }
+            .first ?? .zero
+        let screenScale: CGFloat = 1
+        #else
         let screen = UIScreen.main
         let screenBounds = screen.bounds
+        let screenScale = screen.scale
+        #endif
         let interfaceStyle = UIApplication.shared.connectedScenes
             .compactMap { ($0 as? UIWindowScene)?.keyWindow?.traitCollection.userInterfaceStyle }
             .first
@@ -86,7 +54,7 @@ public final class LoupeAgent {
                 width: finiteDouble(screenBounds.width.doubleValue) ?? 0,
                 height: finiteDouble(screenBounds.height.doubleValue) ?? 0
             ),
-            scale: finiteDouble(screen.scale.doubleValue) ?? 1,
+            scale: finiteDouble(screenScale.doubleValue) ?? 1,
             interfaceStyle: interfaceStyle
         )
 
@@ -126,6 +94,17 @@ public final class LoupeAgent {
             sceneRefs.append(sceneRef)
         }
 
+        let registeredProbeRefs = LoupeRuntime.shared.registeredProbes().map { probe in
+            let ref = makeRef()
+            nodes[ref] = loupeRegisteredProbeNode(
+                probe,
+                ref: ref,
+                parentRef: appRef,
+                runtimeMetadata: LoupeRuntime.shared.metadata(forTestID: probe.id)
+            )
+            return ref
+        }
+
         nodes[appRef] = LoupeNode(
             ref: appRef,
             parentRef: nil,
@@ -141,7 +120,7 @@ public final class LoupeAgent {
             isVisible: true,
             isEnabled: true,
             isInteractive: false,
-            children: sceneRefs
+            children: sceneRefs + registeredProbeRefs
         )
 
         let snapshot = LoupeSnapshot(
@@ -161,135 +140,57 @@ public final class LoupeAgent {
         LoupeObservationCompactor.compact(captureSnapshot(), options: options)
     }
 
-    public func mutate(_ request: LoupeMutationRequest) throws -> LoupeMutationResponse {
-        let beforeCapture = captureSnapshotWithViewRefs()
-        let selector = loupeSelector(from: request.selector)
-        let matches = LoupeSnapshotQuery.find(
-            selector,
-            in: beforeCapture.snapshot,
-            options: LoupeQueryOptions(includeHidden: true, includeDisabled: true, maxResults: 8)
-        )
+    public func hitTest(point: LoupePoint) -> LoupeHitTestReport {
+        let capture = captureSnapshotWithViewRefs()
+        let cgPoint = CGPoint(x: point.x, y: point.y)
 
-        guard matches.count == 1, let target = matches.first else {
-            if matches.isEmpty {
-                throw LoupeMutationError(status: 404, code: "node_not_found", message: "No view node matched selector.")
-            }
-            throw LoupeMutationError(
-                code: "ambiguous_selector",
-                message: "Selector matched multiple view nodes: \(matches.map { $0.ref }.joined(separator: ", "))"
-            )
-        }
+        for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+            for window in scene.windows.reversed() {
+                let pointInWindow = window.convert(cgPoint, from: nil)
+                guard let view = window.hitTest(pointInWindow, with: nil) else {
+                    continue
+                }
 
-        guard let beforeNode = beforeCapture.snapshot.nodes[target.ref] else {
-            throw LoupeMutationError(status: 404, code: "node_not_found", message: "Matched node disappeared before mutation.")
-        }
-        guard let view = beforeCapture.viewsByRef[target.ref] else {
-            throw LoupeMutationError(
-                code: "unsupported_target",
-                message: "Matched node \(target.ref) is synthetic or not backed by a UIView."
-            )
-        }
-
-        try applyMutation(
-            property: request.property,
-            value: request.value,
-            to: view,
-            layout: request.layout,
-            animation: request.animation
-        )
-
-        LoupeRuntime.shared.log(
-            level: "info",
-            "mutation_applied",
-            metadata: [
-                "property": .string(request.property),
-                "ref": .string(target.ref)
-            ]
-        )
-
-        let afterCapture = captureSnapshotWithViewRefs()
-        guard let afterNode = afterCapture.snapshot.nodes[target.ref] else {
-            throw LoupeMutationError(status: 404, code: "node_not_found", message: "Mutated node disappeared after mutation.")
-        }
-        let effective = mutationPropertyValue(request.property, in: afterNode)
-        let changed = effective.map { mutationValuesApproximatelyEqual(request.value, $0) }
-        let warning = mutationWarning(
-            request: request,
-            targetRef: target.ref,
-            changed: changed,
-            snapshot: afterCapture.snapshot
-        )
-
-        return LoupeMutationResponse(
-            property: request.property,
-            selector: request.selector,
-            value: request.value,
-            target: target,
-            before: beforeNode,
-            after: afterNode,
-            hierarchy: mutationHierarchyContext(targetRef: target.ref, snapshot: afterCapture.snapshot),
-            requested: request.value,
-            effective: effective,
-            changed: changed,
-            animation: request.animation,
-            warning: warning,
-            snapshotID: afterCapture.snapshot.id
-        )
-    }
-
-    public func mutateConstraint(_ request: LoupeConstraintMutationRequest) throws -> LoupeConstraintMutationResponse {
-        guard request.constant != nil || request.priority != nil || request.isActive != nil else {
-            throw LoupeMutationError(code: "missing_constraint_mutation", message: "Constraint mutation requires constant, priority, or isActive.")
-        }
-        guard let constraint = runtimeConstraint(matching: request.id) else {
-            throw LoupeMutationError(status: 404, code: "constraint_not_found", message: "No runtime constraint matched id \(request.id).")
-        }
-        Self.mutatedConstraints[request.id] = constraint
-
-        let before = layoutConstraintProperties(constraint)
-        if let constant = request.constant {
-            constraint.constant = CGFloat(constant)
-        }
-        if let priority = request.priority {
-            guard priority >= 1, priority <= 1000 else {
-                throw LoupeMutationError(code: "invalid_value", message: "Constraint priority must be between 1 and 1000.")
-            }
-            constraint.priority = UILayoutPriority(Float(priority))
-        }
-        if let isActive = request.isActive {
-            constraint.isActive = isActive
-        }
-
-        if request.layout {
-            layoutRuntimeWindows()
-        }
-
-        let after = layoutConstraintProperties(constraint)
-        Self.mutatedConstraints[request.id] = constraint
-        let changed = constraintMutationMatches(request, after)
-        let warning = changed ? nil : "Constraint mutation applied, but the effective constraint does not match the requested value. A layout owner may have restored it."
-        let snapshot = captureSnapshot()
-
-        return LoupeConstraintMutationResponse(
-            id: request.id,
-            before: before,
-            after: after,
-            requested: request,
-            changed: changed,
-            warning: warning,
-            snapshotID: snapshot.id
-        )
-    }
-
-    public func mutationCapabilities() -> [LoupeMutationCapability] {
-        mutationDescriptors
-            .map { descriptor in
-                LoupeMutationCapability(
-                    property: descriptor.property,
-                    aliases: descriptor.aliases.sorted()
+                let ref = capture.viewRefs[ObjectIdentifier(view)]
+                let node = ref.flatMap { capture.snapshot.nodes[$0] }
+                return LoupeHitTestReport(
+                    point: point,
+                    hitRef: ref,
+                    hitTestID: node?.testID,
+                    hitTypeName: node?.uiKit?.className ?? node?.typeName ?? typeName(of: view),
+                    responderChain: buildResponderChain(from: view, capture: capture)
                 )
             }
-            .sorted { $0.property < $1.property }
+        }
+
+        return LoupeHitTestReport(point: point)
+    }
+
+    public func responderChain(selector: LoupeSelector) -> LoupeHitTestReport? {
+        let capture = captureSnapshotWithViewRefs()
+        guard let match = LoupeSnapshotQuery.find(
+            selector,
+            in: capture.snapshot,
+            options: LoupeQueryOptions(includeHidden: true, includeDisabled: true, maxResults: 1)
+        ).first else {
+            return nil
+        }
+
+        if let view = capture.viewsByRef[match.ref] {
+            let node = capture.snapshot.nodes[match.ref]
+            return LoupeHitTestReport(
+                point: match.frame?.center ?? LoupePoint(x: 0, y: 0),
+                hitRef: match.ref,
+                hitTestID: match.testID,
+                hitTypeName: node?.uiKit?.className ?? node?.typeName ?? typeName(of: view),
+                responderChain: buildResponderChain(from: view, capture: capture)
+            )
+        }
+
+        guard let frame = match.frame else {
+            return nil
+        }
+        return hitTest(point: frame.center)
     }
 
     public func encodedSnapshot() throws -> Data {
@@ -393,6 +294,7 @@ public final class LoupeAgent {
 
         let testID = view.accessibilityIdentifier ?? stringMetadata("id", from: view.loupeMetadata)
         let customMetadata = mergedMetadata(view.loupeMetadata, with: LoupeRuntime.shared.metadata(forTestID: testID))
+        let accessibility = accessibility(for: view)
 
         nodes[ref] = LoupeNode(
             ref: ref,
@@ -401,8 +303,8 @@ public final class LoupeAgent {
             typeName: typeName(of: view),
             role: role(for: view),
             testID: testID,
-            label: view.accessibilityLabel,
-            value: view.accessibilityValue,
+            label: accessibility.label,
+            value: accessibility.value,
             placeholder: placeholder(for: view),
             text: text(for: view),
             renderedText: renderedText(for: view),
@@ -412,7 +314,7 @@ public final class LoupeAgent {
             isEnabled: isEnabled(view),
             isInteractive: isInteractive(view),
             style: style(for: view),
-            accessibility: accessibility(for: view),
+            accessibility: accessibility,
             runtime: runtimeProperties(for: view),
             uiKit: uiKitProperties(for: view),
             custom: customMetadata,
@@ -420,103 +322,6 @@ public final class LoupeAgent {
         )
 
         return ref
-    }
-
-    private func captureSyntheticBarButtonItems(
-        in view: UIView,
-        parentRef: String,
-        inheritedVisible: Bool,
-        nodes: inout [String: LoupeNode]
-    ) -> [String] {
-        guard let navigationBar = view as? UINavigationBar, let item = navigationBar.topItem else {
-            return []
-        }
-
-        let leftItems = item.leftBarButtonItems ?? item.leftBarButtonItem.map { [$0] } ?? []
-        let rightItems = item.rightBarButtonItems ?? item.rightBarButtonItem.map { [$0] } ?? []
-        let candidates = barButtonCandidateViews(in: navigationBar)
-        var consumedCandidateIDs = Set<ObjectIdentifier>()
-        var refs: [String] = []
-
-        for (index, barButtonItem) in leftItems.enumerated() {
-            let ref = makeRef()
-            let match = matchedBarButtonView(
-                for: barButtonItem,
-                position: "left",
-                index: index,
-                candidates: candidates,
-                consumedCandidateIDs: &consumedCandidateIDs
-            )
-            nodes[ref] = syntheticBarButtonNode(
-                barButtonItem,
-                ref: ref,
-                parentRef: parentRef,
-                position: "left",
-                index: index,
-                matchedView: match,
-                inheritedVisible: inheritedVisible
-            )
-            refs.append(ref)
-        }
-
-        for (index, barButtonItem) in rightItems.enumerated() {
-            let ref = makeRef()
-            let match = matchedBarButtonView(
-                for: barButtonItem,
-                position: "right",
-                index: index,
-                candidates: candidates,
-                consumedCandidateIDs: &consumedCandidateIDs
-            )
-            nodes[ref] = syntheticBarButtonNode(
-                barButtonItem,
-                ref: ref,
-                parentRef: parentRef,
-                position: "right",
-                index: index,
-                matchedView: match,
-                inheritedVisible: inheritedVisible
-            )
-            refs.append(ref)
-        }
-
-        return refs
-    }
-
-    private func captureSyntheticTabBarItems(
-        in view: UIView,
-        parentRef: String,
-        inheritedVisible: Bool,
-        nodes: inout [String: LoupeNode]
-    ) -> [String] {
-        guard let tabBar = view as? UITabBar, let items = tabBar.items, !items.isEmpty else {
-            return []
-        }
-
-        let candidates = tabBarItemCandidateViews(in: tabBar)
-        var consumedCandidateIDs = Set<ObjectIdentifier>()
-        var refs: [String] = []
-
-        for (index, tabBarItem) in items.enumerated() {
-            let ref = makeRef()
-            let match = matchedTabBarItemView(
-                for: tabBarItem,
-                candidates: candidates,
-                consumedCandidateIDs: &consumedCandidateIDs
-            )
-            nodes[ref] = syntheticTabBarItemNode(
-                tabBarItem,
-                ref: ref,
-                parentRef: parentRef,
-                index: index,
-                selected: tabBar.selectedItem === tabBarItem,
-                matchedView: match,
-                inheritedVisible: inheritedVisible
-            )
-            refs.append(ref)
-        }
-
-        return refs
     }
 
     private func captureNativeAccessibilityTree(
@@ -527,6 +332,7 @@ public final class LoupeAgent {
 
         var tree = LoupeAccessibilityTree.build(from: snapshot)
         var signatures = Set(tree.nodes.values.map(nativeAccessibilitySignature(for:)))
+        let accessibilityVisibleRefs = LoupeSurfaceVisibility.visibleNodeRefs(in: snapshot, includesOffscreen: true)
 
         for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
             for window in scene.windows {
@@ -534,6 +340,7 @@ public final class LoupeAgent {
                     in: window,
                     snapshot: snapshot,
                     viewRefs: viewRefs,
+                    accessibilityVisibleRefs: accessibilityVisibleRefs,
                     tree: &tree,
                     signatures: &signatures
                 )
@@ -547,6 +354,7 @@ public final class LoupeAgent {
         in view: UIView,
         snapshot: LoupeSnapshot,
         viewRefs: [ObjectIdentifier: String],
+        accessibilityVisibleRefs: Set<String>,
         tree: inout LoupeAccessibilityTree,
         signatures: inout Set<String>
     ) {
@@ -556,6 +364,7 @@ public final class LoupeAgent {
                     in: $0,
                     snapshot: snapshot,
                     viewRefs: viewRefs,
+                    accessibilityVisibleRefs: accessibilityVisibleRefs,
                     tree: &tree,
                     signatures: &signatures
                 )
@@ -573,6 +382,7 @@ public final class LoupeAgent {
                 for: element,
                 sourceRef: sourceRef,
                 snapshot: snapshot,
+                accessibilityVisibleRefs: accessibilityVisibleRefs,
                 tree: tree
             ) else {
                 continue
@@ -604,6 +414,7 @@ public final class LoupeAgent {
                 in: $0,
                 snapshot: snapshot,
                 viewRefs: viewRefs,
+                accessibilityVisibleRefs: accessibilityVisibleRefs,
                 tree: &tree,
                 signatures: &signatures
             )
@@ -614,6 +425,7 @@ public final class LoupeAgent {
         for element: NSObject,
         sourceRef: String,
         snapshot: LoupeSnapshot,
+        accessibilityVisibleRefs: Set<String>,
         tree: LoupeAccessibilityTree
     ) -> LoupeAccessibilityNode? {
         let testID = accessibilityIdentifier(for: element)
@@ -634,9 +446,12 @@ public final class LoupeAgent {
             return nil
         }
 
-        let isVisible = !element.accessibilityElementsHidden
+        let sourceSurfaceVisible = snapshot.nodes[sourceRef].map {
+            $0.isVisible && accessibilityVisibleRefs.contains($0.ref)
+        } ?? true
+        let isVisible = sourceSurfaceVisible
+            && !element.accessibilityElementsHidden
             && !frame.isEmpty
-            && intersectsScreen(frame, screen: snapshot.screen.size)
 
         return LoupeAccessibilityNode(
             ref: makeNativeAccessibilityRef(sourceRef: sourceRef),
@@ -702,7 +517,7 @@ public final class LoupeAgent {
         return elements
     }
 
-    private func makeRef() -> String {
+    func makeRef() -> String {
         nextRef += 1
         return "n\(nextRef)"
     }
@@ -713,1061 +528,41 @@ public final class LoupeAgent {
     }
 }
 
-private struct CapturedSnapshot {
+struct CapturedSnapshot {
     var snapshot: LoupeSnapshot
     var viewRefs: [ObjectIdentifier: String]
     var viewsByRef: [String: UIView]
 }
 
 @MainActor
-private func loupeSelector(from selector: LoupeMutationSelector) -> LoupeSelector {
-    switch selector.kind {
-    case .testID:
-        return .testID(selector.value)
-    case .ref:
-        return .ref(selector.value)
-    case .role:
-        return .role(selector.value)
-    case .text:
-        return .text(selector.value, exact: selector.exact)
-    case .roleAndText:
-        return .roleAndText(role: selector.role ?? "", text: selector.value, exact: selector.exact)
-    }
-}
+private func buildResponderChain(from view: UIView, capture: CapturedSnapshot) -> [LoupeResponderEntry] {
+    var entries: [LoupeResponderEntry] = []
+    var responder: UIResponder? = view
 
-@MainActor
-private func mutationHierarchyContext(targetRef: String, snapshot: LoupeSnapshot) -> LoupeMutationHierarchyContext? {
-    guard let target = snapshot.nodes[targetRef] else {
-        return nil
-    }
-    let parentNode = target.parentRef.flatMap { snapshot.nodes[$0] }
-    let parent = parentNode.map(mutationNodeSummary)
-    let siblings = parentNode?.children
-        .filter { $0 != targetRef }
-        .compactMap { snapshot.nodes[$0].map(mutationNodeSummary) } ?? []
-    let children = target.children.compactMap { snapshot.nodes[$0].map(mutationNodeSummary) }
-
-    return LoupeMutationHierarchyContext(
-        target: mutationNodeSummary(target),
-        parent: parent,
-        siblings: siblings,
-        children: children
-    )
-}
-
-private func mutationWarning(
-    request: LoupeMutationRequest,
-    targetRef: String,
-    changed: Bool?,
-    snapshot: LoupeSnapshot
-) -> String? {
-    var warnings: [String] = []
-    if changed == false {
-        warnings.append("Mutation applied, but the effective snapshot value does not match the requested value. A layout pass or UIKit owner may have restored it.")
-    }
-    if normalizedMutationProperty(request.property) == "backgroundcolor",
-       let coverageWarning = backgroundPaintCoverageWarning(targetRef: targetRef, snapshot: snapshot) {
-        warnings.append(coverageWarning)
-    }
-    return warnings.isEmpty ? nil : warnings.joined(separator: " ")
-}
-
-private func backgroundPaintCoverageWarning(targetRef: String, snapshot: LoupeSnapshot) -> String? {
-    guard let target = snapshot.nodes[targetRef], let targetFrame = target.frame else {
-        return nil
-    }
-    guard let coveringChild = target.children.compactMap({ snapshot.nodes[$0] }).first(where: { child in
-        guard child.isVisible, let childFrame = child.frame else {
-            return false
+    while let current = responder {
+        if let view = current as? UIView {
+            let ref = capture.viewRefs[ObjectIdentifier(view)]
+            let node = ref.flatMap { capture.snapshot.nodes[$0] }
+            entries.append(
+                LoupeResponderEntry(
+                    typeName: typeName(of: view),
+                    ref: ref,
+                    testID: node?.testID ?? view.accessibilityIdentifier,
+                    frame: node?.frame ?? frameInScreen(for: view)
+                )
+            )
+        } else {
+            entries.append(LoupeResponderEntry(typeName: typeName(of: current)))
         }
-        return framesApproximatelyEqual(targetFrame, childFrame)
-    }) else {
-        return nil
-    }
-    let typeName = coveringChild.uiKit?.className ?? coveringChild.typeName
-    return "backgroundColor changed, but same-frame child \(coveringChild.ref) (\(typeName)) may cover it. Try mutating \(coveringChild.ref) backgroundColor instead."
-}
 
-private func framesApproximatelyEqual(_ lhs: LoupeRect, _ rhs: LoupeRect, tolerance: Double = 0.5) -> Bool {
-    abs(lhs.x - rhs.x) <= tolerance
-        && abs(lhs.y - rhs.y) <= tolerance
-        && abs(lhs.width - rhs.width) <= tolerance
-        && abs(lhs.height - rhs.height) <= tolerance
+        responder = current.next
+    }
+
+    return entries
 }
 
 @MainActor
-private func mutationNodeSummary(_ node: LoupeNode) -> LoupeMutationNodeSummary {
-    LoupeMutationNodeSummary(
-        ref: node.ref,
-        typeName: node.uiKit?.className ?? node.typeName,
-        role: node.role,
-        testID: node.testID,
-        text: LoupeObservationCompactor.displayText(for: node),
-        frame: node.frame
-    )
-}
-
-@MainActor
-private func applyMutation(
-    property: String,
-    value: LoupeMutationValue,
-    to view: UIView,
-    layout: Bool,
-    animation: LoupeMutationAnimation?
-) throws {
-    let property = normalizedMutationProperty(property)
-    guard let descriptor = mutationDescriptors.first(where: { $0.aliases.contains(property) }) else {
-        throw unsupportedProperty(property, view: view)
-    }
-
-    let changes = {
-        do {
-            LoupeMutationAnimationErrorBox.clear()
-            try descriptor.apply(view, value)
-            view.setNeedsDisplay()
-            if layout {
-                view.setNeedsLayout()
-                view.superview?.setNeedsLayout()
-                view.layoutIfNeeded()
-                view.superview?.layoutIfNeeded()
-            }
-        } catch {
-            LoupeMutationAnimationErrorBox.current = error
-        }
-    }
-
-    guard let animation else {
-        LoupeMutationAnimationErrorBox.clear()
-        changes()
-        if let error = LoupeMutationAnimationErrorBox.take() {
-            throw error
-        }
-        return
-    }
-
-    UIView.animate(
-        withDuration: animation.duration,
-        delay: animation.delay,
-        options: animationOptions(animation.curve),
-        animations: changes
-    )
-    if let error = LoupeMutationAnimationErrorBox.take() {
-        throw error
-    }
-}
-
-@MainActor
-private enum LoupeMutationAnimationErrorBox {
-    static var current: Error?
-
-    static func take() -> Error? {
-        let error = current
-        current = nil
-        return error
-    }
-
-    static func clear() {
-        current = nil
-    }
-}
-
-private func animationOptions(_ curve: String) -> UIView.AnimationOptions {
-    switch curve.lowercased() {
-    case "linear":
-        return [.curveLinear, .beginFromCurrentState]
-    case "easein":
-        return [.curveEaseIn, .beginFromCurrentState]
-    case "easeout":
-        return [.curveEaseOut, .beginFromCurrentState]
-    default:
-        return [.curveEaseInOut, .beginFromCurrentState]
-    }
-}
-
-private func mutationPropertyValue(_ property: String, in node: LoupeNode) -> LoupeMutationValue? {
-    switch normalizedMutationProperty(property) {
-    case "frame":
-        return node.frame.map(LoupeMutationValue.rect)
-    case "alpha", "style.alpha", "uikit.alpha":
-        return node.style?.alpha.map(LoupeMutationValue.double)
-    case "hidden", "ishidden", "uikit.ishidden":
-        return .bool(!node.isVisible)
-    case "backgroundcolor", "style.backgroundcolor":
-        return node.style?.backgroundColor.map(LoupeMutationValue.color)
-    case "tintcolor", "style.tintcolor":
-        return node.style?.tintColor.map(LoupeMutationValue.color)
-    case "bordercolor", "layer.bordercolor", "style.bordercolor":
-        return node.style?.borderColor.map(LoupeMutationValue.color)
-    case "borderwidth", "layer.borderwidth", "style.borderwidth":
-        return node.style?.borderWidth.map(LoupeMutationValue.double)
-    case "cornerradius", "layer.cornerradius", "style.cornerradius":
-        return node.style?.cornerRadius.map(LoupeMutationValue.double)
-    case "shadowcolor", "layer.shadowcolor":
-        return node.style?.shadowColor.map(LoupeMutationValue.color)
-    case "shadowopacity", "layer.shadowopacity":
-        return node.style?.shadowOpacity.map(LoupeMutationValue.double)
-    case "shadowradius", "layer.shadowradius":
-        return node.style?.shadowRadius.map(LoupeMutationValue.double)
-    case "shadowoffset", "layer.shadowoffset":
-        return node.style?.shadowOffset.map(LoupeMutationValue.size)
-    case "text", "label.text", "textfield.text", "textview.text", "uikit.text":
-        return node.text.map(LoupeMutationValue.string)
-    case "placeholder", "textfield.placeholder", "searchbar.placeholder":
-        return node.placeholder.map(LoupeMutationValue.string)
-    case "accessibility.label", "accessibilitylabel", "label":
-        return node.accessibility?.label.map(LoupeMutationValue.string) ?? node.label.map(LoupeMutationValue.string)
-    case "accessibility.value", "accessibilityvalue":
-        return node.accessibility?.value.map(LoupeMutationValue.string) ?? node.value.map(LoupeMutationValue.string)
-    case "accessibility.hint", "accessibilityhint":
-        return node.accessibility?.hint.map(LoupeMutationValue.string)
-    case "accessibility.identifier", "accessibilityidentifier", "testid":
-        return node.accessibility?.identifier.map(LoupeMutationValue.string) ?? node.testID.map(LoupeMutationValue.string)
-    case "layout.translatesautoresizingmaskintoconstraints", "translatesautoresizingmaskintoconstraints":
-        return node.uiKit?.layout.map { .bool($0.translatesAutoresizingMaskIntoConstraints) }
-    case "layout.hugging.horizontal":
-        return node.uiKit?.layout.map { .double($0.hugging.horizontal) }
-    case "layout.hugging.vertical":
-        return node.uiKit?.layout.map { .double($0.hugging.vertical) }
-    case "layout.compressionresistance.horizontal":
-        return node.uiKit?.layout.map { .double($0.compressionResistance.horizontal) }
-    case "layout.compressionresistance.vertical":
-        return node.uiKit?.layout.map { .double($0.compressionResistance.vertical) }
-    case "stack.axis", "stackview.axis":
-        return node.uiKit?.stackView.map { .string($0.axis) }
-    case "stack.alignment", "stackview.alignment":
-        return node.uiKit?.stackView.map { .string($0.alignment) }
-    case "stack.distribution", "stackview.distribution":
-        return node.uiKit?.stackView.map { .string($0.distribution) }
-    case "stack.spacing", "stackview.spacing":
-        return node.uiKit?.stackView.map { .double($0.spacing) }
-    case "stack.layoutmarginsrelativearrangement", "stackview.layoutmarginsrelativearrangement":
-        return node.uiKit?.stackView.map { .bool($0.isLayoutMarginsRelativeArrangement) }
-    case "contentoffset", "scrollview.contentoffset":
-        return node.uiKit?.scrollView.map { .point($0.contentOffset) }
-    case "contentsize", "scrollview.contentsize":
-        return node.uiKit?.scrollView.map { .size($0.contentSize) }
-    case "contentinset", "scrollview.contentinset":
-        return node.uiKit?.scrollView.map { .rect(mutationRect(from: $0.contentInset)) }
-    case "scrollindicatorinsets", "scrollview.scrollindicatorinsets":
-        return node.uiKit?.scrollView.map { .rect(mutationRect(from: $0.scrollIndicatorInsets)) }
-    case "scrollenabled", "isscrollenabled", "scrollview.isscrollenabled":
-        return node.uiKit?.scrollView.map { .bool($0.isScrollEnabled) }
-    case "pagingenabled", "ispagingenabled", "scrollview.ispagingenabled":
-        return node.uiKit?.scrollView.map { .bool($0.isPagingEnabled) }
-    case "bounces", "scrollview.bounces":
-        return node.uiKit?.scrollView.map { .bool($0.bounces) }
-    case "showshorizontalscrollindicator":
-        return node.uiKit?.scrollView.map { .bool($0.showsHorizontalScrollIndicator) }
-    case "showsverticalscrollindicator":
-        return node.uiKit?.scrollView.map { .bool($0.showsVerticalScrollIndicator) }
-    default:
-        return nil
-    }
-}
-
-private func mutationRect(from insets: LoupeInsets) -> LoupeRect {
-    LoupeRect(x: insets.top, y: insets.left, width: insets.bottom, height: insets.right)
-}
-
-private func mutationValuesApproximatelyEqual(_ requested: LoupeMutationValue, _ effective: LoupeMutationValue) -> Bool {
-    switch (requested, effective) {
-    case let (.bool(lhs), .bool(rhs)):
-        return lhs == rhs
-    case let (.int(lhs), .int(rhs)):
-        return lhs == rhs
-    case let (.int(lhs), .double(rhs)):
-        return numericValuesApproximatelyEqual(Double(lhs), rhs)
-    case let (.double(lhs), .int(rhs)):
-        return numericValuesApproximatelyEqual(lhs, Double(rhs))
-    case let (.double(lhs), .double(rhs)):
-        return numericValuesApproximatelyEqual(lhs, rhs)
-    case let (.string(lhs), .string(rhs)):
-        return lhs == rhs
-    case let (.color(lhs), .color(rhs)):
-        return abs(lhs.red - rhs.red) < 0.01
-            && abs(lhs.green - rhs.green) < 0.01
-            && abs(lhs.blue - rhs.blue) < 0.01
-            && abs(lhs.alpha - rhs.alpha) < 0.01
-    case let (.point(lhs), .point(rhs)):
-        return abs(lhs.x - rhs.x) < 0.5 && abs(lhs.y - rhs.y) < 0.5
-    case let (.size(lhs), .size(rhs)):
-        return abs(lhs.width - rhs.width) < 0.5 && abs(lhs.height - rhs.height) < 0.5
-    case let (.rect(lhs), .rect(rhs)):
-        return abs(lhs.x - rhs.x) < 0.5
-            && abs(lhs.y - rhs.y) < 0.5
-            && abs(lhs.width - rhs.width) < 0.5
-            && abs(lhs.height - rhs.height) < 0.5
-    default:
-        return false
-    }
-}
-
-private func numericValuesApproximatelyEqual(_ lhs: Double, _ rhs: Double) -> Bool {
-    guard lhs.isFinite, rhs.isFinite else {
-        return lhs == rhs
-    }
-    let tolerance = max(1e-6, abs(lhs) * 1e-6, abs(rhs) * 1e-6)
-    return abs(lhs - rhs) <= tolerance
-}
-
-private struct LoupeMutationDescriptor {
-    var property: String
-    var aliases: Set<String>
-    var apply: @MainActor (UIView, LoupeMutationValue) throws -> Void
-}
-
-@MainActor
-private var mutationDescriptors: [LoupeMutationDescriptor] {
-    viewMutationDescriptors
-        + layerMutationDescriptors
-        + accessibilityMutationDescriptors
-        + textMutationDescriptors
-        + controlMutationDescriptors
-        + scrollMutationDescriptors
-        + stackMutationDescriptors
-}
-
-private func mutation(
-    _ aliases: [String],
-    apply: @escaping @MainActor (UIView, LoupeMutationValue) throws -> Void
-) -> LoupeMutationDescriptor {
-    let normalizedAliases = aliases.map(normalizedMutationProperty)
-    return LoupeMutationDescriptor(
-        property: normalizedAliases.first ?? "",
-        aliases: Set(normalizedAliases),
-        apply: apply
-    )
-}
-
-@MainActor
-private var viewMutationDescriptors: [LoupeMutationDescriptor] {
-    [
-        mutation(["frame"]) { view, value in
-            view.frame = try frameInSuperview(try rectValue(value), for: view)
-        },
-        mutation(["bounds"]) { view, value in
-            view.bounds = cgRect(try rectValue(value))
-        },
-        mutation(["center"]) { view, value in
-            view.center = try pointInSuperview(try pointValue(value), for: view)
-        },
-        mutation(["alpha", "style.alpha", "uiKit.alpha"]) { view, value in
-            view.alpha = CGFloat(try doubleValue(value))
-        },
-        mutation(["hidden", "isHidden", "uiKit.isHidden"]) { view, value in
-            view.isHidden = try boolValue(value)
-        },
-        mutation(["opaque", "isOpaque", "uiKit.isOpaque"]) { view, value in
-            view.isOpaque = try boolValue(value)
-        },
-        mutation(["clipsToBounds", "masksToBounds", "uiKit.clipsToBounds"]) { view, value in
-            let bool = try boolValue(value)
-            view.clipsToBounds = bool
-            view.layer.masksToBounds = bool
-        },
-        mutation(["userInteractionEnabled", "isUserInteractionEnabled", "uiKit.userInteractionEnabled"]) { view, value in
-            view.isUserInteractionEnabled = try boolValue(value)
-        },
-        mutation(["backgroundColor", "style.backgroundColor"]) { view, value in
-            view.backgroundColor = try uiColor(value)
-        },
-        mutation(["tintColor"]) { view, value in
-            view.tintColor = try uiColor(value)
-        },
-        mutation(["contentMode", "uiKit.contentMode"]) { view, value in
-            view.contentMode = try contentMode(try stringValue(value))
-        },
-        mutation(["tag", "uiKit.tag"]) { view, value in
-            view.tag = try intValue(value)
-        },
-        mutation(["layout.translatesAutoresizingMaskIntoConstraints", "translatesAutoresizingMaskIntoConstraints"]) { view, value in
-            view.translatesAutoresizingMaskIntoConstraints = try boolValue(value)
-        },
-        mutation(["layout.hugging.horizontal"]) { view, value in
-            view.setContentHuggingPriority(UILayoutPriority(Float(try doubleValue(value))), for: .horizontal)
-        },
-        mutation(["layout.hugging.vertical"]) { view, value in
-            view.setContentHuggingPriority(UILayoutPriority(Float(try doubleValue(value))), for: .vertical)
-        },
-        mutation(["layout.compressionResistance.horizontal"]) { view, value in
-            view.setContentCompressionResistancePriority(UILayoutPriority(Float(try doubleValue(value))), for: .horizontal)
-        },
-        mutation(["layout.compressionResistance.vertical"]) { view, value in
-            view.setContentCompressionResistancePriority(UILayoutPriority(Float(try doubleValue(value))), for: .vertical)
-        }
-    ]
-}
-
-@MainActor
-private var layerMutationDescriptors: [LoupeMutationDescriptor] {
-    [
-        mutation(["borderColor", "layer.borderColor", "style.borderColor"]) { view, value in
-            view.layer.borderColor = try uiColor(value).cgColor
-        },
-        mutation(["borderWidth", "layer.borderWidth", "style.borderWidth"]) { view, value in
-            view.layer.borderWidth = CGFloat(try doubleValue(value))
-        },
-        mutation(["cornerRadius", "layer.cornerRadius", "style.cornerRadius"]) { view, value in
-            view.layer.cornerRadius = CGFloat(try doubleValue(value))
-        },
-        mutation(["shadowColor", "layer.shadowColor"]) { view, value in
-            view.layer.shadowColor = try uiColor(value).cgColor
-        },
-        mutation(["shadowOpacity", "layer.shadowOpacity"]) { view, value in
-            view.layer.shadowOpacity = Float(try doubleValue(value))
-        },
-        mutation(["shadowRadius", "layer.shadowRadius"]) { view, value in
-            view.layer.shadowRadius = CGFloat(try doubleValue(value))
-        },
-        mutation(["shadowOffset", "layer.shadowOffset"]) { view, value in
-            let size = try sizeValue(value)
-            view.layer.shadowOffset = CGSize(width: size.width, height: size.height)
-        },
-        mutation(["layer.opacity"]) { view, value in
-            view.layer.opacity = Float(try doubleValue(value))
-        },
-        mutation(["layer.zPosition", "zPosition"]) { view, value in
-            view.layer.zPosition = CGFloat(try doubleValue(value))
-        }
-    ]
-}
-
-@MainActor
-private var accessibilityMutationDescriptors: [LoupeMutationDescriptor] {
-    [
-        mutation(["accessibility.identifier", "accessibilityIdentifier", "testID"]) { view, value in
-            view.accessibilityIdentifier = try stringValue(value)
-        },
-        mutation(["accessibility.label", "accessibilityLabel", "label"]) { view, value in
-            view.accessibilityLabel = try stringValue(value)
-        },
-        mutation(["accessibility.value", "accessibilityValue"]) { view, value in
-            view.accessibilityValue = try stringValue(value)
-        },
-        mutation(["accessibility.hint", "accessibilityHint"]) { view, value in
-            view.accessibilityHint = try stringValue(value)
-        },
-        mutation(["accessibility.isElement", "isAccessibilityElement"]) { view, value in
-            view.isAccessibilityElement = try boolValue(value)
-        }
-    ]
-}
-
-@MainActor
-private var textMutationDescriptors: [LoupeMutationDescriptor] {
-    [
-        mutation(["text", "label.text", "textField.text", "textView.text", "uiKit.text"]) { view, value in
-            try setText(try stringValue(value), on: view)
-        },
-        mutation(["placeholder", "textField.placeholder", "searchBar.placeholder"]) { view, value in
-            if let textField = view as? UITextField {
-                textField.placeholder = try stringValue(value)
-            } else if let searchBar = view as? UISearchBar {
-                searchBar.placeholder = try stringValue(value)
-            } else {
-                throw unsupportedProperty("placeholder", view: view)
-            }
-        },
-        mutation(["title", "button.title"]) { view, value in
-            guard let button = view as? UIButton else {
-                throw unsupportedProperty("title", view: view)
-            }
-            button.setTitle(try stringValue(value), for: .normal)
-        },
-        mutation(["textColor", "style.textColor"]) { view, value in
-            try setTextColor(try uiColor(value), on: view)
-        },
-        mutation(["fontSize", "font.size", "style.fontSize"]) { view, value in
-            try setFontSize(CGFloat(try doubleValue(value)), on: view)
-        },
-        mutation(["textAlignment", "label.textAlignment", "textField.textAlignment", "textView.textAlignment"]) { view, value in
-            try setTextAlignment(try stringValue(value), on: view)
-        },
-        mutation(["numberOfLines", "label.numberOfLines"]) { view, value in
-            guard let label = view as? UILabel else {
-                throw unsupportedProperty("numberOfLines", view: view)
-            }
-            label.numberOfLines = try intValue(value)
-        },
-        mutation(["lineBreakMode", "label.lineBreakMode", "button.lineBreakMode"]) { view, value in
-            try setLineBreakMode(try stringValue(value), on: view)
-        },
-        mutation(["adjustsFontSizeToFitWidth", "label.adjustsFontSizeToFitWidth", "textField.adjustsFontSizeToFitWidth"]) { view, value in
-            if let label = view as? UILabel {
-                label.adjustsFontSizeToFitWidth = try boolValue(value)
-            } else if let textField = view as? UITextField {
-                textField.adjustsFontSizeToFitWidth = try boolValue(value)
-            } else {
-                throw unsupportedProperty("adjustsFontSizeToFitWidth", view: view)
-            }
-        },
-        mutation(["minimumScaleFactor", "label.minimumScaleFactor"]) { view, value in
-            guard let label = view as? UILabel else {
-                throw unsupportedProperty("minimumScaleFactor", view: view)
-            }
-            label.minimumScaleFactor = CGFloat(try doubleValue(value))
-        },
-        mutation(["secureTextEntry", "textField.isSecureTextEntry"]) { view, value in
-            guard let textField = view as? UITextField else {
-                throw unsupportedProperty("secureTextEntry", view: view)
-            }
-            textField.isSecureTextEntry = try boolValue(value)
-        }
-    ]
-}
-
-@MainActor
-private var controlMutationDescriptors: [LoupeMutationDescriptor] {
-    [
-        mutation(["enabled", "isEnabled", "control.enabled"]) { view, value in
-            guard let control = view as? UIControl else {
-                throw unsupportedProperty("enabled", view: view)
-            }
-            control.isEnabled = try boolValue(value)
-        },
-        mutation(["selected", "isSelected", "control.selected"]) { view, value in
-            guard let control = view as? UIControl else {
-                throw unsupportedProperty("selected", view: view)
-            }
-            control.isSelected = try boolValue(value)
-        },
-        mutation(["highlighted", "isHighlighted", "control.highlighted"]) { view, value in
-            guard let control = view as? UIControl else {
-                throw unsupportedProperty("highlighted", view: view)
-            }
-            control.isHighlighted = try boolValue(value)
-        },
-        mutation(["switch.isOn", "switchControl.isOn", "uiKit.switch.isOn", "uiKit.switchControl.isOn"]) { view, value in
-            guard let control = view as? UISwitch else {
-                throw unsupportedProperty("switch.isOn", view: view)
-            }
-            control.setOn(try boolValue(value), animated: false)
-            control.sendActions(for: .valueChanged)
-        },
-        mutation(["slider.value", "uiKit.slider.value"]) { view, value in
-            guard let control = view as? UISlider else {
-                throw unsupportedProperty("slider.value", view: view)
-            }
-            control.value = Float(try doubleValue(value))
-            control.sendActions(for: .valueChanged)
-        },
-        mutation(["slider.minimumValue"]) { view, value in
-            guard let control = view as? UISlider else {
-                throw unsupportedProperty("slider.minimumValue", view: view)
-            }
-            control.minimumValue = Float(try doubleValue(value))
-        },
-        mutation(["slider.maximumValue"]) { view, value in
-            guard let control = view as? UISlider else {
-                throw unsupportedProperty("slider.maximumValue", view: view)
-            }
-            control.maximumValue = Float(try doubleValue(value))
-        },
-        mutation(["stepper.value", "uiKit.stepper.value"]) { view, value in
-            guard let control = view as? UIStepper else {
-                throw unsupportedProperty("stepper.value", view: view)
-            }
-            control.value = try doubleValue(value)
-            control.sendActions(for: .valueChanged)
-        },
-        mutation(["stepper.minimumValue"]) { view, value in
-            guard let control = view as? UIStepper else {
-                throw unsupportedProperty("stepper.minimumValue", view: view)
-            }
-            control.minimumValue = try doubleValue(value)
-        },
-        mutation(["stepper.maximumValue"]) { view, value in
-            guard let control = view as? UIStepper else {
-                throw unsupportedProperty("stepper.maximumValue", view: view)
-            }
-            control.maximumValue = try doubleValue(value)
-        },
-        mutation(["stepper.stepValue"]) { view, value in
-            guard let control = view as? UIStepper else {
-                throw unsupportedProperty("stepper.stepValue", view: view)
-            }
-            control.stepValue = try doubleValue(value)
-        },
-        mutation(["segmentedControl.selectedSegmentIndex", "uiKit.segmentedControl.selectedSegmentIndex"]) { view, value in
-            guard let control = view as? UISegmentedControl else {
-                throw unsupportedProperty("segmentedControl.selectedSegmentIndex", view: view)
-            }
-            let index = try intValue(value)
-            guard index == UISegmentedControl.noSegment || (index >= 0 && index < control.numberOfSegments) else {
-                throw LoupeMutationError(code: "invalid_value", message: "Segment index \(index) is outside available segments.")
-            }
-            control.selectedSegmentIndex = index
-            control.sendActions(for: .valueChanged)
-        },
-        mutation(["pageControl.currentPage", "uiKit.pageControl.currentPage"]) { view, value in
-            guard let control = view as? UIPageControl else {
-                throw unsupportedProperty("pageControl.currentPage", view: view)
-            }
-            control.currentPage = try intValue(value)
-            control.sendActions(for: .valueChanged)
-        },
-        mutation(["pageControl.numberOfPages"]) { view, value in
-            guard let control = view as? UIPageControl else {
-                throw unsupportedProperty("pageControl.numberOfPages", view: view)
-            }
-            control.numberOfPages = try intValue(value)
-        },
-        mutation(["progressView.progress", "progressView.value", "uiKit.progress.progress", "uiKit.progressView.value"]) { view, value in
-            guard let progressView = view as? UIProgressView else {
-                throw unsupportedProperty("progressView.progress", view: view)
-            }
-            progressView.progress = Float(try doubleValue(value))
-        },
-        mutation(["datePicker.date"]) { view, value in
-            guard let datePicker = view as? UIDatePicker else {
-                throw unsupportedProperty("datePicker.date", view: view)
-            }
-            datePicker.date = try dateValue(value)
-            datePicker.sendActions(for: .valueChanged)
-        },
-        mutation(["datePicker.countDownDuration"]) { view, value in
-            guard let datePicker = view as? UIDatePicker else {
-                throw unsupportedProperty("datePicker.countDownDuration", view: view)
-            }
-            datePicker.countDownDuration = try doubleValue(value)
-            datePicker.sendActions(for: .valueChanged)
-        },
-        mutation(["activityIndicator.animating", "activityIndicator.isAnimating"]) { view, value in
-            guard let activityIndicator = view as? UIActivityIndicatorView else {
-                throw unsupportedProperty("activityIndicator.animating", view: view)
-            }
-            if try boolValue(value) {
-                activityIndicator.startAnimating()
-            } else {
-                activityIndicator.stopAnimating()
-            }
-        },
-        mutation(["pickerView.selectedRow"]) { view, value in
-            guard let pickerView = view as? UIPickerView else {
-                throw unsupportedProperty("pickerView.selectedRow", view: view)
-            }
-            let point = try pointValue(value)
-            pickerView.selectRow(Int(point.y), inComponent: Int(point.x), animated: false)
-        }
-    ]
-}
-
-@MainActor
-private var scrollMutationDescriptors: [LoupeMutationDescriptor] {
-    [
-        mutation(["contentOffset", "scrollView.contentOffset"]) { view, value in
-            guard let scrollView = view as? UIScrollView else {
-                throw unsupportedProperty("contentOffset", view: view)
-            }
-            let point = try pointValue(value)
-            scrollView.setContentOffset(CGPoint(x: point.x, y: point.y), animated: false)
-        },
-        mutation(["contentSize", "scrollView.contentSize"]) { view, value in
-            guard let scrollView = view as? UIScrollView else {
-                throw unsupportedProperty("contentSize", view: view)
-            }
-            let size = try sizeValue(value)
-            scrollView.contentSize = CGSize(width: size.width, height: size.height)
-        },
-        mutation(["contentInset", "scrollView.contentInset"]) { view, value in
-            guard let scrollView = view as? UIScrollView else {
-                throw unsupportedProperty("contentInset", view: view)
-            }
-            scrollView.contentInset = try edgeInsetsValue(value)
-        },
-        mutation(["scrollIndicatorInsets", "scrollView.scrollIndicatorInsets"]) { view, value in
-            guard let scrollView = view as? UIScrollView else {
-                throw unsupportedProperty("scrollIndicatorInsets", view: view)
-            }
-            scrollView.scrollIndicatorInsets = try edgeInsetsValue(value)
-        },
-        mutation(["scrollEnabled", "isScrollEnabled", "scrollView.isScrollEnabled"]) { view, value in
-            guard let scrollView = view as? UIScrollView else {
-                throw unsupportedProperty("scrollEnabled", view: view)
-            }
-            scrollView.isScrollEnabled = try boolValue(value)
-        },
-        mutation(["pagingEnabled", "isPagingEnabled", "scrollView.isPagingEnabled"]) { view, value in
-            guard let scrollView = view as? UIScrollView else {
-                throw unsupportedProperty("pagingEnabled", view: view)
-            }
-            scrollView.isPagingEnabled = try boolValue(value)
-        },
-        mutation(["bounces", "scrollView.bounces"]) { view, value in
-            guard let scrollView = view as? UIScrollView else {
-                throw unsupportedProperty("bounces", view: view)
-            }
-            scrollView.bounces = try boolValue(value)
-        },
-        mutation(["showsHorizontalScrollIndicator"]) { view, value in
-            guard let scrollView = view as? UIScrollView else {
-                throw unsupportedProperty("showsHorizontalScrollIndicator", view: view)
-            }
-            scrollView.showsHorizontalScrollIndicator = try boolValue(value)
-        },
-        mutation(["showsVerticalScrollIndicator"]) { view, value in
-            guard let scrollView = view as? UIScrollView else {
-                throw unsupportedProperty("showsVerticalScrollIndicator", view: view)
-            }
-            scrollView.showsVerticalScrollIndicator = try boolValue(value)
-        }
-    ]
-}
-
-@MainActor
-private var stackMutationDescriptors: [LoupeMutationDescriptor] {
-    [
-        mutation(["stack.axis", "stackView.axis"]) { view, value in
-            guard let stackView = view as? UIStackView else {
-                throw unsupportedProperty("stack.axis", view: view)
-            }
-            stackView.axis = try layoutConstraintAxis(try stringValue(value))
-        },
-        mutation(["stack.alignment", "stackView.alignment"]) { view, value in
-            guard let stackView = view as? UIStackView else {
-                throw unsupportedProperty("stack.alignment", view: view)
-            }
-            stackView.alignment = try stackAlignment(try stringValue(value))
-        },
-        mutation(["stack.distribution", "stackView.distribution"]) { view, value in
-            guard let stackView = view as? UIStackView else {
-                throw unsupportedProperty("stack.distribution", view: view)
-            }
-            stackView.distribution = try stackDistribution(try stringValue(value))
-        },
-        mutation(["stack.spacing", "stackView.spacing"]) { view, value in
-            guard let stackView = view as? UIStackView else {
-                throw unsupportedProperty("stack.spacing", view: view)
-            }
-            stackView.spacing = CGFloat(try doubleValue(value))
-        },
-        mutation(["stack.layoutMarginsRelativeArrangement", "stackView.layoutMarginsRelativeArrangement"]) { view, value in
-            guard let stackView = view as? UIStackView else {
-                throw unsupportedProperty("stack.layoutMarginsRelativeArrangement", view: view)
-            }
-            stackView.isLayoutMarginsRelativeArrangement = try boolValue(value)
-        }
-    ]
-}
-
-private func normalizedMutationProperty(_ property: String) -> String {
-    property
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-        .replacingOccurrences(of: "uiKit.", with: "uikit.")
-        .lowercased()
-}
-
-@MainActor
-private func unsupportedProperty(_ property: String, view: UIView) -> LoupeMutationError {
-    LoupeMutationError(
-        code: "unsupported_property",
-        message: "Property '\(property)' is not supported for \(typeName(of: view))."
-    )
-}
-
-private func boolValue(_ value: LoupeMutationValue) throws -> Bool {
-    switch value {
-    case let .bool(value):
-        return value
-    case let .int(value):
-        return value != 0
-    case let .double(value):
-        return value != 0
-    case let .string(value):
-        if ["true", "yes", "1"].contains(value.lowercased()) { return true }
-        if ["false", "no", "0"].contains(value.lowercased()) { return false }
-        throw LoupeMutationError(code: "invalid_value", message: "Expected a boolean value.")
-    default:
-        throw LoupeMutationError(code: "invalid_value", message: "Expected a boolean value.")
-    }
-}
-
-private func intValue(_ value: LoupeMutationValue) throws -> Int {
-    switch value {
-    case let .int(value):
-        return value
-    case let .double(value):
-        return Int(value)
-    case let .string(value):
-        guard let int = Int(value) else {
-            throw LoupeMutationError(code: "invalid_value", message: "Expected an integer value.")
-        }
-        return int
-    default:
-        throw LoupeMutationError(code: "invalid_value", message: "Expected an integer value.")
-    }
-}
-
-private func doubleValue(_ value: LoupeMutationValue) throws -> Double {
-    switch value {
-    case let .double(value):
-        guard value.isFinite else { break }
-        return value
-    case let .int(value):
-        return Double(value)
-    case let .string(value):
-        guard let double = Double(value), double.isFinite else { break }
-        return double
-    default:
-        break
-    }
-    throw LoupeMutationError(code: "invalid_value", message: "Expected a numeric value.")
-}
-
-private func stringValue(_ value: LoupeMutationValue) throws -> String {
-    switch value {
-    case let .string(value):
-        return value
-    case let .bool(value):
-        return value ? "true" : "false"
-    case let .int(value):
-        return String(value)
-    case let .double(value):
-        return String(value)
-    default:
-        throw LoupeMutationError(code: "invalid_value", message: "Expected a string value.")
-    }
-}
-
-private func rectValue(_ value: LoupeMutationValue) throws -> LoupeRect {
-    guard case let .rect(rect) = value else {
-        throw LoupeMutationError(code: "invalid_value", message: "Expected a rect value.")
-    }
-    return rect
-}
-
-private func pointValue(_ value: LoupeMutationValue) throws -> LoupePoint {
-    guard case let .point(point) = value else {
-        throw LoupeMutationError(code: "invalid_value", message: "Expected a point value.")
-    }
-    return point
-}
-
-private func sizeValue(_ value: LoupeMutationValue) throws -> LoupeSize {
-    guard case let .size(size) = value else {
-        throw LoupeMutationError(code: "invalid_value", message: "Expected a size value.")
-    }
-    return size
-}
-
-private func uiColor(_ value: LoupeMutationValue) throws -> UIColor {
-    guard case let .color(color) = value else {
-        throw LoupeMutationError(code: "invalid_value", message: "Expected a color value.")
-    }
-    return UIColor(
-        red: CGFloat(color.red),
-        green: CGFloat(color.green),
-        blue: CGFloat(color.blue),
-        alpha: CGFloat(color.alpha)
-    )
-}
-
-@MainActor
-private func setText(_ text: String, on view: UIView) throws {
-    if let label = view as? UILabel {
-        label.text = text
-    } else if let textField = view as? UITextField {
-        textField.text = text
-        textField.sendActions(for: .editingChanged)
-    } else if let textView = view as? UITextView {
-        textView.text = text
-    } else if let button = view as? UIButton {
-        button.setTitle(text, for: .normal)
-    } else if let searchBar = view as? UISearchBar {
-        searchBar.text = text
-    } else {
-        throw unsupportedProperty("text", view: view)
-    }
-}
-
-@MainActor
-private func setTextColor(_ color: UIColor, on view: UIView) throws {
-    if let label = view as? UILabel {
-        label.textColor = color
-    } else if let textField = view as? UITextField {
-        textField.textColor = color
-    } else if let textView = view as? UITextView {
-        textView.textColor = color
-    } else if let button = view as? UIButton {
-        button.setTitleColor(color, for: .normal)
-    } else {
-        throw unsupportedProperty("textColor", view: view)
-    }
-}
-
-@MainActor
-private func setFontSize(_ size: CGFloat, on view: UIView) throws {
-    if let label = view as? UILabel {
-        label.font = label.font.withSize(size)
-    } else if let textField = view as? UITextField, let font = textField.font {
-        textField.font = font.withSize(size)
-    } else if let textView = view as? UITextView {
-        textView.font = textView.font?.withSize(size) ?? UIFont.systemFont(ofSize: size)
-    } else if let button = view as? UIButton, let font = button.titleLabel?.font {
-        button.titleLabel?.font = font.withSize(size)
-    } else {
-        throw unsupportedProperty("fontSize", view: view)
-    }
-}
-
-@MainActor
-private func setTextAlignment(_ rawValue: String, on view: UIView) throws {
-    let alignment = try textAlignment(rawValue)
-    if let label = view as? UILabel {
-        label.textAlignment = alignment
-    } else if let textField = view as? UITextField {
-        textField.textAlignment = alignment
-    } else if let textView = view as? UITextView {
-        textView.textAlignment = alignment
-    } else {
-        throw unsupportedProperty("textAlignment", view: view)
-    }
-}
-
-@MainActor
-private func setLineBreakMode(_ rawValue: String, on view: UIView) throws {
-    let mode = try lineBreakMode(rawValue)
-    if let label = view as? UILabel {
-        label.lineBreakMode = mode
-    } else if let button = view as? UIButton {
-        button.titleLabel?.lineBreakMode = mode
-    } else {
-        throw unsupportedProperty("lineBreakMode", view: view)
-    }
-}
-
-@MainActor
-private func frameInSuperview(_ rect: LoupeRect, for view: UIView) -> CGRect {
-    let screenRect = cgRect(rect)
-    guard let superview = view.superview, view.window != nil else {
-        return screenRect
-    }
-    return superview.convert(screenRect, from: nil)
-}
-
-@MainActor
-private func pointInSuperview(_ point: LoupePoint, for view: UIView) -> CGPoint {
-    let screenPoint = CGPoint(x: point.x, y: point.y)
-    guard let superview = view.superview, view.window != nil else {
-        return screenPoint
-    }
-    return superview.convert(screenPoint, from: nil)
-}
-
-private func cgRect(_ rect: LoupeRect) -> CGRect {
-    CGRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
-}
-
-private func contentMode(_ rawValue: String) throws -> UIView.ContentMode {
-    switch rawValue.lowercased() {
-    case "scaletofill": return .scaleToFill
-    case "scaleaspectfit": return .scaleAspectFit
-    case "scaleaspectfill": return .scaleAspectFill
-    case "redraw": return .redraw
-    case "center": return .center
-    case "top": return .top
-    case "bottom": return .bottom
-    case "left": return .left
-    case "right": return .right
-    case "topleft": return .topLeft
-    case "topright": return .topRight
-    case "bottomleft": return .bottomLeft
-    case "bottomright": return .bottomRight
-    default:
-        throw LoupeMutationError(code: "invalid_value", message: "Unsupported contentMode: \(rawValue)")
-    }
-}
-
-private func textAlignment(_ rawValue: String) throws -> NSTextAlignment {
-    switch rawValue.lowercased() {
-    case "left": return .left
-    case "center": return .center
-    case "right": return .right
-    case "justified": return .justified
-    case "natural": return .natural
-    default:
-        throw LoupeMutationError(code: "invalid_value", message: "Unsupported textAlignment: \(rawValue)")
-    }
-}
-
-private func lineBreakMode(_ rawValue: String) throws -> NSLineBreakMode {
-    switch rawValue.lowercased() {
-    case "bywordwrapping", "word": return .byWordWrapping
-    case "bycharwrapping", "char": return .byCharWrapping
-    case "byclipping", "clip": return .byClipping
-    case "bytruncatinghead", "head": return .byTruncatingHead
-    case "bytruncatingtail", "tail": return .byTruncatingTail
-    case "bytruncatingmiddle", "middle": return .byTruncatingMiddle
-    default:
-        throw LoupeMutationError(code: "invalid_value", message: "Unsupported lineBreakMode: \(rawValue)")
-    }
-}
-
-private func dateValue(_ value: LoupeMutationValue) throws -> Date {
-    switch value {
-    case let .double(value):
-        return Date(timeIntervalSince1970: value)
-    case let .int(value):
-        return Date(timeIntervalSince1970: TimeInterval(value))
-    case let .string(value):
-        let formatter = ISO8601DateFormatter()
-        guard let date = formatter.date(from: value) else {
-            throw LoupeMutationError(code: "invalid_value", message: "Expected an ISO-8601 date or Unix timestamp.")
-        }
-        return date
-    default:
-        throw LoupeMutationError(code: "invalid_value", message: "Expected an ISO-8601 date or Unix timestamp.")
-    }
-}
-
-private func edgeInsetsValue(_ value: LoupeMutationValue) throws -> UIEdgeInsets {
-    let rect = try rectValue(value)
-    return UIEdgeInsets(top: rect.x, left: rect.y, bottom: rect.width, right: rect.height)
-}
-
-private func layoutConstraintAxis(_ rawValue: String) throws -> NSLayoutConstraint.Axis {
-    switch rawValue.lowercased() {
-    case "horizontal", "h": return .horizontal
-    case "vertical", "v": return .vertical
-    default:
-        throw LoupeMutationError(code: "invalid_value", message: "Unsupported stack axis: \(rawValue)")
-    }
-}
-
-private func stackAlignment(_ rawValue: String) throws -> UIStackView.Alignment {
-    switch rawValue.lowercased() {
-    case "fill": return .fill
-    case "leading", "top": return .leading
-    case "firstbaseline", "firstBaseline": return .firstBaseline
-    case "center": return .center
-    case "trailing", "bottom": return .trailing
-    case "lastbaseline", "lastBaseline": return .lastBaseline
-    default:
-        throw LoupeMutationError(code: "invalid_value", message: "Unsupported stack alignment: \(rawValue)")
-    }
-}
-
-private func stackDistribution(_ rawValue: String) throws -> UIStackView.Distribution {
-    switch rawValue.lowercased() {
-    case "fill": return .fill
-    case "fillequally", "fillEqually": return .fillEqually
-    case "fillproportionally", "fillProportionally": return .fillProportionally
-    case "equalspacing", "equalSpacing": return .equalSpacing
-    case "equalcentering", "equalCentering": return .equalCentering
-    default:
-        throw LoupeMutationError(code: "invalid_value", message: "Unsupported stack distribution: \(rawValue)")
-    }
-}
-
-func makeLoupeJSONEncoder() -> JSONEncoder {
-    let encoder = JSONEncoder()
-    encoder.dateEncodingStrategy = .iso8601
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    return encoder
-}
-
-@MainActor
-private func frameInScreen(for view: UIView) -> LoupeRect? {
+func frameInScreen(for view: UIView) -> LoupeRect? {
     guard view.window != nil else { return nil }
     return loupeRect(from: view.convert(view.bounds, to: nil))
 }
@@ -1786,19 +581,27 @@ private func role(for view: UIView) -> String? {
     if view is UIButton { return "button" }
     if view is UITextField { return "textField" }
     if view is UITextView { return "textView" }
+    #if !os(tvOS)
     if view is UISwitch { return "switch" }
     if view is UISlider { return "slider" }
     if view is UIStepper { return "stepper" }
+    #endif
     if view is UISegmentedControl { return "segmentedControl" }
+    #if !os(tvOS)
     if view is UIDatePicker { return "datePicker" }
+    #endif
     if view is UIPageControl { return "pageControl" }
     if view is UIProgressView { return "progress" }
     if view is UIActivityIndicatorView { return "activityIndicator" }
     if view is UICollectionView { return "collectionView" }
     if view is UITableView { return "tableView" }
+    #if !os(tvOS)
     if view is UIPickerView { return "pickerView" }
+    #endif
     if view is UITabBar { return "tabBar" }
+    #if !os(tvOS)
     if view is UIToolbar { return "toolbar" }
+    #endif
     if view is UINavigationBar { return "navigationBar" }
     #if canImport(WebKit)
     if view is WKWebView { return "webView" }
@@ -1818,7 +621,7 @@ private func role(for view: UIView) -> String? {
 }
 
 @MainActor
-private func text(for view: UIView) -> String? {
+func text(for view: UIView) -> String? {
     if let label = view as? UILabel {
         return label.text
     }
@@ -1828,6 +631,9 @@ private func text(for view: UIView) -> String? {
     }
 
     if let textField = view as? UITextField {
+        if textField.isSecureTextEntry {
+            return redactedSecureText(for: textField.text)
+        }
         return textField.text
     }
 
@@ -1865,6 +671,13 @@ private func semanticText(for view: UIView) -> String? {
 @MainActor
 private func placeholder(for view: UIView) -> String? {
     (view as? UITextField)?.placeholder
+}
+
+private func redactedSecureText(for text: String?) -> String? {
+    guard nonEmpty(text) != nil else {
+        return nil
+    }
+    return "••••••••"
 }
 
 @MainActor
@@ -1911,12 +724,21 @@ private func style(for view: UIView) -> LoupeStyle {
 
 @MainActor
 private func capturedTintColor(for view: UIView) -> UIColor? {
-    guard view is UIControl
+    #if os(tvOS)
+    let usesOwnTint = view is UIControl
+        || view is UIImageView
+        || view is UINavigationBar
+        || view is UITabBar
+        || view.tintColorDiffersFromSuperview
+    #else
+    let usesOwnTint = view is UIControl
         || view is UIImageView
         || view is UINavigationBar
         || view is UIToolbar
         || view is UITabBar
-        || view.tintColorDiffersFromSuperview else {
+        || view.tintColorDiffersFromSuperview
+    #endif
+    guard usesOwnTint else {
         return nil
     }
     return view.tintColor
@@ -2034,7 +856,7 @@ private func loupeColor(from color: UIColor?, traitCollection: UITraitCollection
     )
 }
 
-private func finiteDouble(_ value: Double) -> Double? {
+func finiteDouble(_ value: Double) -> Double? {
     value.isFinite ? value : nil
 }
 
@@ -2064,6 +886,7 @@ private func mergedMetadata(
     return result
 }
 
+@MainActor
 private func accessibilityIdentifier(for element: NSObject) -> String? {
     if let identifier = (element as? UIAccessibilityIdentification)?.accessibilityIdentifier {
         return nonEmpty(identifier)
@@ -2147,7 +970,7 @@ private func accessibilityVisualOrder(
     return lhsFrame.x < rhsFrame.x
 }
 
-private func typeName(of value: AnyObject) -> String {
+func typeName(of value: AnyObject) -> String {
     String(describing: type(of: value))
 }
 
@@ -2166,10 +989,17 @@ private func interfaceStyleName(_ style: UIUserInterfaceStyle) -> String {
 
 @MainActor
 private func accessibility(for view: UIView) -> LoupeAccessibility {
-    LoupeAccessibility(
+    let value: String?
+    if let textField = view as? UITextField, textField.isSecureTextEntry {
+        value = redactedSecureText(for: textField.accessibilityValue ?? textField.text)
+    } else {
+        value = view.accessibilityValue
+    }
+
+    return LoupeAccessibility(
         identifier: view.accessibilityIdentifier,
         label: view.accessibilityLabel,
-        value: view.accessibilityValue,
+        value: value,
         hint: view.accessibilityHint,
         traits: accessibilityTraits(view.accessibilityTraits),
         frame: frameInScreen(for: view),
@@ -2210,6 +1040,8 @@ private func uiKitProperties(for view: UIView) -> LoupeUIKitProperties {
         userInteractionEnabled: view.isUserInteractionEnabled,
         gestureRecognizers: view.gestureRecognizers?.map { typeName(of: $0) } ?? [],
         isFirstResponder: view.isFirstResponder,
+        isFocused: view.isFocused,
+        canBecomeFocused: view.canBecomeFocused,
         windowLevel: (view as? UIWindow).flatMap { finiteDouble($0.windowLevel.rawValue.doubleValue) },
         layout: layoutProperties(for: view),
         stackView: stackViewProperties(for: view),
@@ -2227,6 +1059,8 @@ private func uiKitProperties(for view: UIView) -> LoupeUIKitProperties {
         pageControl: pageControlProperties(for: view),
         progressView: progressViewProperties(for: view),
         activityIndicator: activityIndicatorProperties(for: view),
+        collectionView: collectionViewProperties(for: view),
+        tableView: tableViewProperties(for: view),
         imageView: imageViewProperties(for: view),
         pickerView: pickerViewProperties(for: view),
         tabBar: tabBarProperties(for: view),
@@ -2238,6 +1072,7 @@ private func uiKitProperties(for view: UIView) -> LoupeUIKitProperties {
 private func layoutProperties(for view: UIView) -> LoupeUILayoutProperties {
     LoupeUILayoutProperties(
         translatesAutoresizingMaskIntoConstraints: view.translatesAutoresizingMaskIntoConstraints,
+        isAmbiguousLayout: view.hasAmbiguousLayout,
         hugging: LoupeUILayoutPriorities(
             horizontal: finiteDouble(Double(view.contentHuggingPriority(for: .horizontal).rawValue)) ?? 0,
             vertical: finiteDouble(Double(view.contentHuggingPriority(for: .vertical).rawValue)) ?? 0
@@ -2273,7 +1108,7 @@ private func stackViewProperties(for view: UIView) -> LoupeUIStackViewProperties
 }
 
 @MainActor
-private func layoutConstraintProperties(_ constraint: NSLayoutConstraint) -> LoupeUILayoutConstraintProperties {
+func layoutConstraintProperties(_ constraint: NSLayoutConstraint) -> LoupeUILayoutConstraintProperties {
     LoupeUILayoutConstraintProperties(
         id: constraintID(constraint),
         identifier: constraint.identifier,
@@ -2290,75 +1125,12 @@ private func layoutConstraintProperties(_ constraint: NSLayoutConstraint) -> Lou
 }
 
 @MainActor
-private func constraintID(_ constraint: NSLayoutConstraint) -> String {
+func constraintID(_ constraint: NSLayoutConstraint) -> String {
     let raw = String(describing: ObjectIdentifier(constraint))
     let value = raw
         .replacingOccurrences(of: "ObjectIdentifier(", with: "")
         .replacingOccurrences(of: ")", with: "")
     return "c\(value)"
-}
-
-@MainActor
-private func runtimeConstraint(matching id: String) -> NSLayoutConstraint? {
-    if let constraint = runtimeConstraints().first(where: { constraintID($0) == id }) {
-        return constraint
-    }
-    return LoupeAgent.mutatedConstraints[id]
-}
-
-@MainActor
-private func runtimeConstraints() -> [NSLayoutConstraint] {
-    var constraints: [NSLayoutConstraint] = []
-    var seen = Set<ObjectIdentifier>()
-
-    func append(_ constraint: NSLayoutConstraint) {
-        let id = ObjectIdentifier(constraint)
-        guard !seen.contains(id) else {
-            return
-        }
-        seen.insert(id)
-        constraints.append(constraint)
-    }
-
-    func visit(_ view: UIView) {
-        view.constraints.forEach(append)
-        view.constraintsAffectingLayout(for: .horizontal).forEach(append)
-        view.constraintsAffectingLayout(for: .vertical).forEach(append)
-        view.subviews.forEach(visit)
-    }
-
-    for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
-        for window in scene.windows {
-            visit(window)
-        }
-    }
-    return constraints
-}
-
-@MainActor
-private func layoutRuntimeWindows() {
-    for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
-        for window in scene.windows {
-            window.setNeedsLayout()
-            window.layoutIfNeeded()
-        }
-    }
-}
-
-private func constraintMutationMatches(
-    _ request: LoupeConstraintMutationRequest,
-    _ effective: LoupeUILayoutConstraintProperties
-) -> Bool {
-    if let constant = request.constant, abs(effective.constant - constant) >= 0.5 {
-        return false
-    }
-    if let priority = request.priority, abs(effective.priority - priority) >= 0.5 {
-        return false
-    }
-    if let isActive = request.isActive, effective.isActive != isActive {
-        return false
-    }
-    return true
 }
 
 @MainActor
@@ -2383,7 +1155,7 @@ private func layoutItemDescription(_ item: Any?) -> String? {
 }
 
 @MainActor
-private func controlProperties(for view: UIView) -> LoupeUIControlProperties? {
+func controlProperties(for view: UIView) -> LoupeUIControlProperties? {
     guard let control = view as? UIControl else {
         return nil
     }
@@ -2406,7 +1178,7 @@ private func labelProperties(for view: UIView) -> LoupeUILabelProperties? {
 }
 
 @MainActor
-private func buttonProperties(for view: UIView) -> LoupeUIButtonProperties? {
+func buttonProperties(for view: UIView) -> LoupeUIButtonProperties? {
     guard let button = view as? UIButton else {
         return nil
     }
@@ -2422,7 +1194,8 @@ private func textFieldProperties(for view: UIView) -> LoupeUITextFieldProperties
     }
     return LoupeUITextFieldProperties(
         textAlignment: textAlignmentName(textField.textAlignment),
-        borderStyle: borderStyleName(textField.borderStyle)
+        borderStyle: borderStyleName(textField.borderStyle),
+        isSecureTextEntry: textField.isSecureTextEntry
     )
 }
 
@@ -2455,14 +1228,144 @@ private func scrollViewProperties(for view: UIView) -> LoupeUIScrollViewProperti
             bottom: finiteDouble(scrollView.adjustedContentInset.bottom.doubleValue) ?? 0,
             right: finiteDouble(scrollView.adjustedContentInset.right.doubleValue) ?? 0
         ),
-        scrollIndicatorInsets: loupeInsets(from: scrollView.scrollIndicatorInsets),
+        scrollIndicatorInsets: scrollIndicatorInsets(for: scrollView),
         isScrollEnabled: scrollView.isScrollEnabled,
-        isPagingEnabled: scrollView.isPagingEnabled,
+        isPagingEnabled: scrollViewIsPagingEnabled(scrollView),
         bounces: scrollView.bounces,
         alwaysBounceVertical: scrollView.alwaysBounceVertical,
         alwaysBounceHorizontal: scrollView.alwaysBounceHorizontal,
         showsVerticalScrollIndicator: scrollView.showsVerticalScrollIndicator,
         showsHorizontalScrollIndicator: scrollView.showsHorizontalScrollIndicator
+    )
+}
+
+@MainActor
+private func scrollViewIsPagingEnabled(_ scrollView: UIScrollView) -> Bool {
+    #if os(tvOS)
+    return false
+    #else
+    return scrollView.isPagingEnabled
+    #endif
+}
+
+@MainActor
+private func scrollIndicatorInsets(for scrollView: UIScrollView) -> LoupeInsets {
+    #if os(tvOS)
+    return LoupeInsets(top: 0, left: 0, bottom: 0, right: 0)
+    #else
+    let verticalInsets = scrollView.verticalScrollIndicatorInsets
+    let horizontalInsets = scrollView.horizontalScrollIndicatorInsets
+    return LoupeInsets(
+        top: finiteDouble(verticalInsets.top.doubleValue) ?? 0,
+        left: finiteDouble(horizontalInsets.left.doubleValue) ?? 0,
+        bottom: finiteDouble(verticalInsets.bottom.doubleValue) ?? 0,
+        right: finiteDouble(horizontalInsets.right.doubleValue) ?? 0
+    )
+    #endif
+}
+
+@MainActor
+private func collectionViewProperties(for view: UIView) -> LoupeUICollectionViewProperties? {
+    guard let collectionView = view as? UICollectionView else {
+        return nil
+    }
+
+    let layout = collectionView.collectionViewLayout
+    let flowLayout = layout as? UICollectionViewFlowLayout
+    return LoupeUICollectionViewProperties(
+        selfSizingInvalidation: collectionViewSelfSizingInvalidationName(collectionView),
+        layoutClassName: typeName(of: layout),
+        delegateRespondsToSizeForItemAt: collectionViewDelegateRespondsToSizeForItemAt(collectionView),
+        flowLayout: flowLayout.map(collectionViewFlowLayoutProperties)
+    )
+}
+
+@MainActor
+private func collectionViewFlowLayoutProperties(_ layout: UICollectionViewFlowLayout) -> LoupeUICollectionFlowLayoutProperties {
+    LoupeUICollectionFlowLayoutProperties(
+        itemSize: loupeSize(from: layout.itemSize),
+        estimatedItemSize: loupeSize(from: layout.estimatedItemSize),
+        usesEstimatedItemSize: layout.estimatedItemSize != .zero,
+        usesAutomaticItemSize: layout.itemSize == UICollectionViewFlowLayout.automaticSize
+    )
+}
+
+@MainActor
+private func tableViewProperties(for view: UIView) -> LoupeUITableViewProperties? {
+    guard let tableView = view as? UITableView else {
+        return nil
+    }
+    return LoupeUITableViewProperties(
+        selfSizingInvalidation: tableViewSelfSizingInvalidationName(tableView),
+        rowHeight: finiteDouble(Double(tableView.rowHeight)) ?? 0,
+        estimatedRowHeight: finiteDouble(Double(tableView.estimatedRowHeight)) ?? 0,
+        usesAutomaticRowHeight: tableView.rowHeight == UITableView.automaticDimension,
+        usesEstimatedRowHeight: tableView.estimatedRowHeight > 0,
+        delegateRespondsToHeightForRowAt: tableViewDelegateResponds(tableView, selector: #selector(UITableViewDelegate.tableView(_:heightForRowAt:))),
+        delegateRespondsToEstimatedHeightForRowAt: tableViewDelegateResponds(tableView, selector: #selector(UITableViewDelegate.tableView(_:estimatedHeightForRowAt:)))
+    )
+}
+
+@MainActor
+func collectionViewSelfSizingInvalidationName(_ collectionView: UICollectionView) -> String? {
+    if #available(iOS 16.0, tvOS 16.0, visionOS 1.0, *) {
+        return collectionViewSelfSizingInvalidationName(collectionView.selfSizingInvalidation)
+    }
+    return nil
+}
+
+@available(iOS 16.0, tvOS 16.0, visionOS 1.0, *)
+private func collectionViewSelfSizingInvalidationName(_ value: UICollectionView.SelfSizingInvalidation) -> String {
+    switch value {
+    case .disabled:
+        return "disabled"
+    case .enabled:
+        return "enabled"
+    case .enabledIncludingConstraints:
+        return "enabledIncludingConstraints"
+    @unknown default:
+        return "unknown"
+    }
+}
+
+@MainActor
+func tableViewSelfSizingInvalidationName(_ tableView: UITableView) -> String? {
+    if #available(iOS 16.0, tvOS 16.0, visionOS 1.0, *) {
+        return tableViewSelfSizingInvalidationName(tableView.selfSizingInvalidation)
+    }
+    return nil
+}
+
+@available(iOS 16.0, tvOS 16.0, visionOS 1.0, *)
+private func tableViewSelfSizingInvalidationName(_ value: UITableView.SelfSizingInvalidation) -> String {
+    switch value {
+    case .disabled:
+        return "disabled"
+    case .enabled:
+        return "enabled"
+    case .enabledIncludingConstraints:
+        return "enabledIncludingConstraints"
+    @unknown default:
+        return "unknown"
+    }
+}
+
+@MainActor
+func collectionViewDelegateRespondsToSizeForItemAt(_ collectionView: UICollectionView) -> Bool {
+    collectionView.delegate?.responds(
+        to: #selector(UICollectionViewDelegateFlowLayout.collectionView(_:layout:sizeForItemAt:))
+    ) ?? false
+}
+
+@MainActor
+func tableViewDelegateResponds(_ tableView: UITableView, selector: Selector) -> Bool {
+    tableView.delegate?.responds(to: selector) ?? false
+}
+
+private func loupeSize(from size: CGSize) -> LoupeSize {
+    LoupeSize(
+        width: finiteDouble(Double(size.width)) ?? 0,
+        height: finiteDouble(Double(size.height)) ?? 0
     )
 }
 
@@ -2475,6 +1378,7 @@ private func loupeInsets(from insets: UIEdgeInsets) -> LoupeInsets {
     )
 }
 
+#if !os(tvOS)
 @MainActor
 private func switchProperties(for view: UIView) -> LoupeUISwitchProperties? {
     guard let switchView = view as? UISwitch else {
@@ -2482,7 +1386,12 @@ private func switchProperties(for view: UIView) -> LoupeUISwitchProperties? {
     }
     return LoupeUISwitchProperties(isOn: switchView.isOn)
 }
+#else
+@MainActor
+private func switchProperties(for view: UIView) -> LoupeUISwitchProperties? { nil }
+#endif
 
+#if !os(tvOS)
 @MainActor
 private func sliderProperties(for view: UIView) -> LoupeUISliderProperties? {
     guard let slider = view as? UISlider else {
@@ -2494,7 +1403,12 @@ private func sliderProperties(for view: UIView) -> LoupeUISliderProperties? {
         maximumValue: finiteDouble(Double(slider.maximumValue))
     )
 }
+#else
+@MainActor
+private func sliderProperties(for view: UIView) -> LoupeUISliderProperties? { nil }
+#endif
 
+#if !os(tvOS)
 @MainActor
 private func stepperProperties(for view: UIView) -> LoupeUIStepperProperties? {
     guard let stepper = view as? UIStepper else {
@@ -2507,6 +1421,10 @@ private func stepperProperties(for view: UIView) -> LoupeUIStepperProperties? {
         stepValue: finiteDouble(stepper.stepValue)
     )
 }
+#else
+@MainActor
+private func stepperProperties(for view: UIView) -> LoupeUIStepperProperties? { nil }
+#endif
 
 @MainActor
 private func segmentedControlProperties(for view: UIView) -> LoupeUISegmentedControlProperties? {
@@ -2519,6 +1437,7 @@ private func segmentedControlProperties(for view: UIView) -> LoupeUISegmentedCon
     )
 }
 
+#if !os(tvOS)
 @MainActor
 private func datePickerProperties(for view: UIView) -> LoupeUIDatePickerProperties? {
     guard let datePicker = view as? UIDatePicker else {
@@ -2531,6 +1450,10 @@ private func datePickerProperties(for view: UIView) -> LoupeUIDatePickerProperti
         maximumDate: datePicker.maximumDate
     )
 }
+#else
+@MainActor
+private func datePickerProperties(for view: UIView) -> LoupeUIDatePickerProperties? { nil }
+#endif
 
 @MainActor
 private func pageControlProperties(for view: UIView) -> LoupeUIPageControlProperties? {
@@ -2570,6 +1493,7 @@ private func imageViewProperties(for view: UIView) -> LoupeUIImageViewProperties
     return LoupeUIImageViewProperties(imageSize: imageSize(for: view))
 }
 
+#if !os(tvOS)
 @MainActor
 private func pickerViewProperties(for view: UIView) -> LoupeUIPickerViewProperties? {
     guard let pickerView = view as? UIPickerView else {
@@ -2580,6 +1504,10 @@ private func pickerViewProperties(for view: UIView) -> LoupeUIPickerViewProperti
         selectedRows: pickerSelectedRows(for: view)
     )
 }
+#else
+@MainActor
+private func pickerViewProperties(for view: UIView) -> LoupeUIPickerViewProperties? { nil }
+#endif
 
 @MainActor
 private func tabBarProperties(for view: UIView) -> LoupeUITabBarProperties? {
@@ -2605,301 +1533,6 @@ private func webViewProperties(for view: UIView) -> LoupeWKWebViewProperties? {
     #else
     return nil
     #endif
-}
-
-@MainActor
-private func syntheticBarButtonNode(
-    _ item: UIBarButtonItem,
-    ref: String,
-    parentRef: String,
-    position: String,
-    index: Int,
-    matchedView: UIView?,
-    inheritedVisible: Bool
-) -> LoupeNode {
-    let frame = matchedView.flatMap(frameInScreen(for:))
-    let visible = inheritedVisible && item.isEnabled && frame.map(frameIntersectsScreen) == true
-    var custom: [String: LoupeMetadataValue] = [
-        "synthetic": .bool(true),
-        "source": .string("UIBarButtonItem"),
-        "barPosition": .string(position),
-        "barIndex": .int(index)
-    ]
-    if let title = item.title {
-        custom["title"] = .string(title)
-    }
-
-    let className = matchedView.map(typeName(of:)) ?? "UIBarButtonItem"
-    return LoupeNode(
-        ref: ref,
-        parentRef: parentRef,
-        kind: .barButtonItem,
-        typeName: "UIBarButtonItem",
-        role: "button",
-        testID: item.accessibilityIdentifier,
-        label: item.accessibilityLabel ?? item.title,
-        value: item.accessibilityValue,
-        text: item.title,
-        frame: frame,
-        isVisible: visible,
-        isEnabled: item.isEnabled,
-        isInteractive: item.isEnabled,
-        accessibility: LoupeAccessibility(
-            identifier: item.accessibilityIdentifier,
-            label: item.accessibilityLabel ?? item.title,
-            value: item.accessibilityValue,
-            hint: item.accessibilityHint,
-            traits: ["button"],
-            frame: frame,
-            activationPoint: frame.map { LoupePoint(x: $0.x + $0.width / 2, y: $0.y + $0.height / 2) },
-            isElement: true
-        ),
-        runtime: matchedView.map(runtimeProperties(for:))
-            ?? LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-        uiKit: LoupeUIKitProperties(
-            className: className,
-            tag: matchedView?.tag ?? 0,
-            alpha: matchedView.flatMap { finiteDouble($0.alpha.doubleValue) } ?? 1,
-            isHidden: matchedView?.isHidden ?? false,
-            isOpaque: matchedView?.isOpaque ?? false,
-            clipsToBounds: matchedView?.clipsToBounds ?? false,
-            contentMode: matchedView.map { contentModeName($0.contentMode) },
-            userInteractionEnabled: matchedView?.isUserInteractionEnabled ?? true,
-            gestureRecognizers: matchedView?.gestureRecognizers?.map { typeName(of: $0) } ?? [],
-            isFirstResponder: matchedView?.isFirstResponder ?? false,
-            control: matchedView.flatMap(controlProperties(for:)),
-            button: matchedView.flatMap(buttonProperties(for:))
-        ),
-        custom: custom
-    )
-}
-
-@MainActor
-private func syntheticTabBarItemNode(
-    _ item: UITabBarItem,
-    ref: String,
-    parentRef: String,
-    index: Int,
-    selected: Bool,
-    matchedView: UIView?,
-    inheritedVisible: Bool
-) -> LoupeNode {
-    let frame = matchedView.flatMap(frameInScreen(for:))
-    let visible = inheritedVisible && item.isEnabled && frame != nil
-    var custom: [String: LoupeMetadataValue] = [
-        "synthetic": .bool(true),
-        "source": .string("UITabBarItem"),
-        "tabIndex": .int(index),
-        "tabTag": .int(item.tag),
-        "selected": .bool(selected)
-    ]
-    if let title = item.title {
-        custom["title"] = .string(title)
-    }
-
-    let className = matchedView.map(typeName(of:)) ?? "UITabBarItem"
-    return LoupeNode(
-        ref: ref,
-        parentRef: parentRef,
-        kind: .tabBarItem,
-        typeName: "UITabBarItem",
-        role: "button",
-        testID: item.accessibilityIdentifier,
-        label: item.accessibilityLabel ?? item.title,
-        value: item.accessibilityValue,
-        text: item.title,
-        frame: frame,
-        isVisible: visible,
-        isEnabled: item.isEnabled,
-        isInteractive: item.isEnabled,
-        accessibility: LoupeAccessibility(
-            identifier: item.accessibilityIdentifier,
-            label: item.accessibilityLabel ?? item.title,
-            value: item.accessibilityValue,
-            hint: item.accessibilityHint,
-            traits: selected ? ["button", "selected"] : ["button"],
-            frame: frame,
-            activationPoint: frame.map { LoupePoint(x: $0.x + $0.width / 2, y: $0.y + $0.height / 2) },
-            isElement: true
-        ),
-        runtime: matchedView.map(runtimeProperties(for:))
-            ?? LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-        uiKit: LoupeUIKitProperties(
-            className: className,
-            tag: matchedView?.tag ?? item.tag,
-            alpha: matchedView.flatMap { finiteDouble($0.alpha.doubleValue) } ?? 1,
-            isHidden: matchedView?.isHidden ?? false,
-            isOpaque: matchedView?.isOpaque ?? false,
-            clipsToBounds: matchedView?.clipsToBounds ?? false,
-            contentMode: matchedView.map { contentModeName($0.contentMode) },
-            userInteractionEnabled: matchedView?.isUserInteractionEnabled ?? true,
-            gestureRecognizers: matchedView?.gestureRecognizers?.map { typeName(of: $0) } ?? [],
-            isFirstResponder: matchedView?.isFirstResponder ?? false,
-            control: matchedView.flatMap(controlProperties(for:)),
-            button: matchedView.flatMap(buttonProperties(for:))
-        ),
-        custom: custom
-    )
-}
-
-@MainActor
-private func matchedBarButtonView(
-    for item: UIBarButtonItem,
-    position: String,
-    index: Int,
-    candidates: [UIView],
-    consumedCandidateIDs: inout Set<ObjectIdentifier>
-) -> UIView? {
-    if let customView = item.customView {
-        let id = ObjectIdentifier(customView)
-        guard !consumedCandidateIDs.contains(id) else {
-            return nil
-        }
-        consumedCandidateIDs.insert(id)
-        return customView
-    }
-
-    let searchableTexts = [item.title, item.accessibilityLabel, item.accessibilityIdentifier]
-        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
-
-    if !searchableTexts.isEmpty {
-        for candidate in candidates where !consumedCandidateIDs.contains(ObjectIdentifier(candidate)) {
-            let text = descendantText(in: candidate)
-            let identifier = candidate.accessibilityIdentifier ?? ""
-            if searchableTexts.contains(where: { text.contains($0) || identifier == $0 }) {
-                consumedCandidateIDs.insert(ObjectIdentifier(candidate))
-                return candidate
-            }
-        }
-    }
-
-    let positionedCandidates = candidates
-        .filter { !consumedCandidateIDs.contains(ObjectIdentifier($0)) }
-        .filter { candidate in
-            guard let frame = frameInScreen(for: candidate) else {
-                return false
-            }
-            return frameIntersectsScreen(frame)
-        }
-        .sorted { lhs, rhs in
-            let lhsFrame = frameInScreen(for: lhs)
-            let rhsFrame = frameInScreen(for: rhs)
-            switch position {
-            case "right":
-                return (lhsFrame?.maxX ?? 0) > (rhsFrame?.maxX ?? 0)
-            default:
-                return (lhsFrame?.x ?? 0) < (rhsFrame?.x ?? 0)
-            }
-        }
-
-    guard positionedCandidates.indices.contains(index) else {
-        return nil
-    }
-
-    let fallback = positionedCandidates[index]
-    consumedCandidateIDs.insert(ObjectIdentifier(fallback))
-    return fallback
-}
-
-@MainActor
-private func barButtonCandidateViews(in view: UIView) -> [UIView] {
-    var result: [UIView] = []
-
-    func walk(_ current: UIView) {
-        if current is UIControl {
-            result.append(current)
-        }
-        current.subviews.forEach(walk)
-    }
-
-    view.subviews.forEach(walk)
-    return result.sorted { lhs, rhs in
-        barButtonCandidateArea(lhs) > barButtonCandidateArea(rhs)
-    }
-}
-
-@MainActor
-private func matchedTabBarItemView(
-    for item: UITabBarItem,
-    candidates: [UIView],
-    consumedCandidateIDs: inout Set<ObjectIdentifier>
-) -> UIView? {
-    let searchableTexts = [item.title, item.accessibilityLabel, item.accessibilityIdentifier]
-        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
-
-    guard !searchableTexts.isEmpty else {
-        return nil
-    }
-
-    for candidate in candidates where !consumedCandidateIDs.contains(ObjectIdentifier(candidate)) {
-        let text = descendantText(in: candidate)
-        let identifier = candidate.accessibilityIdentifier ?? ""
-        if searchableTexts.contains(where: { text.contains($0) || identifier == $0 }) {
-            consumedCandidateIDs.insert(ObjectIdentifier(candidate))
-            return candidate
-        }
-    }
-
-    return nil
-}
-
-@MainActor
-private func frameIntersectsScreen(_ frame: LoupeRect) -> Bool {
-    let bounds = UIScreen.main.bounds
-    let screenFrame = LoupeRect(
-        x: bounds.origin.x.doubleValue,
-        y: bounds.origin.y.doubleValue,
-        width: bounds.width.doubleValue,
-        height: bounds.height.doubleValue
-    )
-    return frame.intersects(screenFrame)
-}
-
-@MainActor
-private func tabBarItemCandidateViews(in view: UIView) -> [UIView] {
-    var result: [UIView] = []
-
-    func walk(_ current: UIView) {
-        if current is UIControl {
-            result.append(current)
-        }
-        current.subviews.forEach(walk)
-    }
-
-    view.subviews.forEach(walk)
-    return result.sorted {
-        let lhsFrame = frameInScreen(for: $0)
-        let rhsFrame = frameInScreen(for: $1)
-        return (lhsFrame?.x ?? 0) < (rhsFrame?.x ?? 0)
-    }
-}
-
-@MainActor
-private func barButtonCandidateArea(_ view: UIView) -> Double {
-    guard let frame = frameInScreen(for: view) else {
-        return 0
-    }
-    return frame.width * frame.height
-}
-
-@MainActor
-private func descendantText(in view: UIView) -> String {
-    var parts: [String] = []
-
-    func walk(_ current: UIView) {
-        if let value = text(for: current), !value.isEmpty {
-            parts.append(value)
-        }
-        if let label = current.accessibilityLabel, !label.isEmpty {
-            parts.append(label)
-        }
-        current.subviews.forEach(walk)
-    }
-
-    walk(view)
-    return parts.joined(separator: " ")
 }
 
 @MainActor
@@ -2959,7 +1592,7 @@ private func accessibilityTraits(_ traits: UIAccessibilityTraits) -> [String] {
     return names
 }
 
-private func contentModeName(_ mode: UIView.ContentMode) -> String {
+func contentModeName(_ mode: UIView.ContentMode) -> String {
     switch mode {
     case .scaleToFill: return "scaleToFill"
     case .scaleAspectFit: return "scaleAspectFit"
@@ -3023,6 +1656,7 @@ private func imageSize(for view: UIView) -> LoupeSize? {
     )
 }
 
+#if !os(tvOS)
 @MainActor
 private func pickerSelectedRows(for view: UIView) -> [Int] {
     guard let pickerView = view as? UIPickerView else {
@@ -3030,6 +1664,7 @@ private func pickerSelectedRows(for view: UIView) -> [Int] {
     }
     return (0..<pickerView.numberOfComponents).map { pickerView.selectedRow(inComponent: $0) }
 }
+#endif
 
 @MainActor
 private func tabBarItemTitles(for view: UIView) -> [String] {
@@ -3057,6 +1692,7 @@ private func webViewTitle(for view: UIView) -> String? {
     #endif
 }
 
+#if !os(tvOS)
 private func datePickerModeName(_ mode: UIDatePicker.Mode) -> String {
     switch mode {
     case .time: return "time"
@@ -3067,6 +1703,7 @@ private func datePickerModeName(_ mode: UIDatePicker.Mode) -> String {
     @unknown default: return "unknown"
     }
 }
+#endif
 
 private func activityIndicatorStyleName(_ style: UIActivityIndicatorView.Style) -> String {
     switch style {
@@ -3074,7 +1711,9 @@ private func activityIndicatorStyleName(_ style: UIActivityIndicatorView.Style) 
     case .large: return "large"
     case .white: return "white"
     case .whiteLarge: return "whiteLarge"
+    #if !os(tvOS)
     case .gray: return "gray"
+    #endif
     @unknown default: return "unknown"
     }
 }
@@ -3232,7 +1871,7 @@ private func sceneActivationStateName(_ state: UIScene.ActivationState) -> Strin
     }
 }
 
-private extension CGFloat {
+extension CGFloat {
     var doubleValue: Double { Double(self) }
 }
 

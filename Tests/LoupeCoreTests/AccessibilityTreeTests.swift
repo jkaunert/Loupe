@@ -65,6 +65,18 @@ struct AccessibilityTreeTests {
                         traits: ["button"],
                         activationPoint: LoupePoint(x: 195, y: 266),
                         isElement: true
+                    ),
+                    uiKit: LoupeUIKitProperties(
+                        className: "UIButton",
+                        tag: 0,
+                        alpha: 1,
+                        isHidden: false,
+                        isOpaque: false,
+                        clipsToBounds: false,
+                        userInteractionEnabled: true,
+                        isFirstResponder: false,
+                        isFocused: true,
+                        canBecomeFocused: true
                     )
                 ),
             ]
@@ -77,6 +89,8 @@ struct AccessibilityTreeTests {
         #expect(tree.nodes["ax-container"]?.children == ["ax-label", "ax-button"])
         #expect(tree.nodes["ax-button"]?.sourceRef == "button")
         #expect(tree.nodes["ax-button"]?.activationPoint == LoupePoint(x: 195, y: 266))
+        #expect(tree.nodes["ax-button"]?.isFocused == true)
+        #expect(tree.nodes["ax-button"]?.canBecomeFocused == true)
     }
 
     @Test func accessibilityQueryMatchesTestIDTextRoleAndSourceRef() {
@@ -140,5 +154,59 @@ struct AccessibilityTreeTests {
         let tree = LoupeAccessibilityTree.build(from: snapshot)
 
         #expect(tree.nodes["ax-button"]?.activationPoint == nil)
+    }
+
+    @Test func accessibilityTreeKeepsAccessibilityValueAndHintOnlyNodes() throws {
+        let snapshot = LoupeSnapshot(
+            id: "s1",
+            capturedAt: Date(timeIntervalSince1970: 0),
+            screen: LoupeScreen(size: LoupeSize(width: 390, height: 844), scale: 3),
+            rootRefs: ["host"],
+            nodes: [
+                "host": LoupeNode(
+                    ref: "host",
+                    parentRef: nil,
+                    kind: .view,
+                    typeName: "NSView",
+                    frame: LoupeRect(x: 0, y: 0, width: 390, height: 120),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    children: ["valueOnly", "hintOnly"]
+                ),
+                "valueOnly": LoupeNode(
+                    ref: "valueOnly",
+                    parentRef: "host",
+                    kind: .view,
+                    typeName: "NSTextField",
+                    frame: LoupeRect(x: 20, y: 20, width: 180, height: 24),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    accessibility: LoupeAccessibility(value: "Value only")
+                ),
+                "hintOnly": LoupeNode(
+                    ref: "hintOnly",
+                    parentRef: "host",
+                    kind: .view,
+                    typeName: "NSAccessibilityElement",
+                    frame: LoupeRect(x: 20, y: 52, width: 180, height: 24),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    accessibility: LoupeAccessibility(hint: "Hint only")
+                ),
+            ]
+        )
+
+        let tree = LoupeAccessibilityTree.build(from: snapshot)
+
+        let valueNode = try #require(tree.nodes["ax-valueOnly"])
+        #expect(valueNode.value == "Value only")
+        #expect(LoupeAccessibilityTreeQuery.find(.text("Value only", exact: true), in: tree).map(\.ref) == ["ax-valueOnly"])
+
+        let hintNode = try #require(tree.nodes["ax-hintOnly"])
+        #expect(hintNode.hint == "Hint only")
+        #expect(LoupeAccessibilityTreeQuery.find(.text("Hint only", exact: true), in: tree).map(\.ref) == ["ax-hintOnly"])
     }
 }

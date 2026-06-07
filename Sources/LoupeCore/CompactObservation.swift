@@ -149,6 +149,8 @@ public enum LoupeObservationCompactor {
             width: snapshot.screen.size.width,
             height: snapshot.screen.size.height
         )
+        let hasKnownScreenSize = snapshot.screen.size.width > 0 && snapshot.screen.size.height > 0
+        let surfaceVisibleRefs = LoupeSurfaceVisibility.visibleNodeRefs(in: snapshot)
 
         let paintOrders = paintOrders(snapshot)
         let opaqueCoverNodes = snapshot.nodes.values
@@ -162,15 +164,8 @@ public enum LoupeObservationCompactor {
 
         let visibleNodes = snapshot.nodes.values
             .filter { node in
-                guard node.isVisible, let frame = node.frame else { return false }
-                guard frame.intersects(screenRect) else { return false }
-                return !isFullyOccluded(
-                    node,
-                    in: snapshot,
-                    screenRect: screenRect,
-                    paintOrders: paintOrders,
-                    opaqueCoverNodes: opaqueCoverNodes
-                )
+                guard surfaceVisibleRefs.contains(node.ref), let frame = node.frame else { return false }
+                return !hasKnownScreenSize || frame.intersects(screenRect)
             }
             .sorted(by: visualOrder)
 

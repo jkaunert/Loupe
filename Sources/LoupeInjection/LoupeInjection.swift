@@ -1,8 +1,7 @@
 import Foundation
 import LoupeKit
 
-#if canImport(UIKit)
-import UIKit
+#if (canImport(UIKit) && !os(watchOS)) || canImport(AppKit) || os(watchOS)
 
 @_cdecl("LoupeInjectorStart")
 public func LoupeInjectorStart() {
@@ -40,12 +39,13 @@ private final class LoupeInjectedRuntime {
 
         let port = UInt16(ProcessInfo.processInfo.environment["LOUPE_PORT"] ?? "")
             ?? LoupeServer.defaultPort
+        let bindHost = ProcessInfo.processInfo.environment["LOUPE_BIND_HOST"] ?? "127.0.0.1"
         let server = LoupeServer()
 
         do {
-            try server.start(port: port)
+            try server.start(port: port, bindHost: bindHost)
             self.server = server
-            NSLog("LoupeInjector started on port \(port)")
+            NSLog("LoupeInjector started on \(bindHost):\(port)")
         } catch {
             NSLog("LoupeInjector failed to start: \(String(describing: error))")
         }

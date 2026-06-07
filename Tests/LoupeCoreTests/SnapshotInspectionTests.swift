@@ -57,6 +57,7 @@ struct SnapshotInspectionTests {
         let stackView = try #require(inspection.node.uiKit?.stackView)
 
         #expect(layout.translatesAutoresizingMaskIntoConstraints == false)
+        #expect(layout.isAmbiguousLayout == true)
         #expect(layout.hugging.horizontal == 250)
         #expect(layout.compressionResistance.vertical == 750)
         #expect(layout.constraints.first?.id == "c-row-height")
@@ -66,5 +67,46 @@ struct SnapshotInspectionTests {
         #expect(stackView.alignment == "center")
         #expect(stackView.spacing == 12)
         #expect(stackView.arrangedSubviewCount == 2)
+    }
+
+    @Test func inspectCanFindOffscreenVisibleNodesThatDiscoveryOmits() throws {
+        let snapshot = InspectionSnapshotFixture.makeSnapshotWithOffscreenNode()
+
+        #expect(LoupeSnapshotQuery.first(.testID("components.offscreen"), in: snapshot) == nil)
+
+        let inspection = try #require(
+            LoupeSnapshotInspector.inspect(.testID("components.offscreen"), in: snapshot)
+        )
+
+        #expect(inspection.node.testID == "components.offscreen")
+        #expect(inspection.node.isVisible)
+        #expect(inspection.parent?.ref == "root")
+    }
+
+    @Test func inspectCanFindFocusedSearchFieldWhenPlatformVisibilityIsFalse() throws {
+        let snapshot = InspectionSnapshotFixture.makeSnapshotWithFocusedSearchField()
+
+        let inspection = try #require(
+            LoupeSnapshotInspector.inspect(.ref("search"), in: snapshot)
+        )
+
+        #expect(inspection.node.ref == "search")
+        #expect(inspection.node.isVisible == true)
+        #expect(inspection.node.uiKit?.isFirstResponder == true)
+        #expect(inspection.node.text == "Invoice")
+    }
+
+    @Test func inspectIncludeHiddenPreservesRawVisibility() throws {
+        let snapshot = InspectionSnapshotFixture.makeSnapshotWithFocusedSearchField()
+
+        let inspection = try #require(
+            LoupeSnapshotInspector.inspect(
+                .ref("search"),
+                in: snapshot,
+                options: LoupeQueryOptions(includeHidden: true)
+            )
+        )
+
+        #expect(inspection.node.isVisible == false)
     }
 }

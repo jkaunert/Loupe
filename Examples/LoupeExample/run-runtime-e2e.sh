@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 PORT="${LOUPE_PORT:-}"
 
 cd "$ROOT_DIR"
+source Examples/LoupeExample/build-simulator-artifacts.sh
 
 run_with_timeout() {
   local seconds="$1"
@@ -33,7 +34,7 @@ booted_udid() {
   run_with_timeout "$(simctl_list_timeout)" xcrun simctl list devices booted --json >"$list_path"
   ruby -rjson -e '
     devices = JSON.parse(STDIN.read).fetch("devices").values.flatten
-    booted = devices.find { |device| device["state"] == "Booted" }
+    booted = devices.find { |device| device["state"] == "Booted" && device["name"].include?("iPhone") }
     puts booted && booted["udid"]
   ' <"$list_path"
 }
@@ -84,31 +85,7 @@ assert_device_ready() {
 
 assert_device_ready
 swift build
-
-xcodebuild \
-  -scheme LoupeInjector \
-  -destination 'generic/platform=iOS Simulator' \
-  -configuration Debug \
-  build >/tmp/loupe-injector-build.log
-
-xcodebuild \
-  -project Examples/LoupeExample/LoupeExample.xcodeproj \
-  -scheme LoupeExample \
-  -destination 'generic/platform=iOS Simulator' \
-  -configuration Debug \
-  build >/tmp/loupe-example-build.log
-
-export LOUPE_INJECTOR_PATH="$(
-  find "$HOME/Library/Developer/Xcode/DerivedData" \
-    -path '*Debug-iphonesimulator/PackageFrameworks/LoupeInjector.framework/LoupeInjector' \
-    -print0 | xargs -0 ls -t | head -1
-)"
-
-APP_PATH="$(
-  find "$HOME/Library/Developer/Xcode/DerivedData" \
-    -path '*Debug-iphonesimulator/LoupeExample.app' \
-    -print0 | xargs -0 ls -td | head -1
-)"
+build_loupe_example_simulator_artifacts "$ROOT_DIR" "platform=iOS Simulator,id=$DEVICE"
 
 terminate_app
 run_with_timeout 30 xcrun simctl install "$DEVICE" "$APP_PATH"
@@ -121,10 +98,10 @@ LAUNCH_ARGUMENTS=(
 if [[ -n "$PORT" ]]; then
   LAUNCH_ARGUMENTS+=(--env "LOUPE_PORT=$PORT")
 fi
-LAUNCH_OUTPUT="$(.build/debug/loupe launch "${LAUNCH_ARGUMENTS[@]}")"
+LAUNCH_OUTPUT="$(.build/debug/loupe app launch "${LAUNCH_ARGUMENTS[@]}")"
 HOST="$(awk '/^loupe host: / { print $3 }' <<<"$LAUNCH_OUTPUT" | tail -1)"
 if [[ -z "$HOST" ]]; then
-  echo "error: loupe launch did not report a runtime host" >&2
+  echo "error: loupe app launch did not report a runtime host" >&2
   echo "$LAUNCH_OUTPUT" >&2
   exit 1
 fi
@@ -136,11 +113,11 @@ SCREENSHOT_PATH="/tmp/loupe-runtime-screen.png"
 RUNTIME_PATH="/tmp/loupe-runtime-state.json"
 
 fetch_snapshot() {
-  .build/debug/loupe fetch "$HOST/snapshot" --timeout 10 --output "$SNAPSHOT_PATH"
+  .build/debug/loupe ui snapshot --host "$HOST" --timeout 10 --output "$SNAPSHOT_PATH"
 }
 
 curl -sS "$HOST/health" | grep -q LoupeKit
-.build/debug/loupe runtime --host "$HOST" --udid "$DEVICE" > "$RUNTIME_PATH"
+.build/debug/loupe app info --host "$HOST" --udid "$DEVICE" > "$RUNTIME_PATH"
 grep -q '"simulatorUDID"' "$RUNTIME_PATH"
 fetch_snapshot
 grep -q '"uiKit"' "$SNAPSHOT_PATH"
@@ -151,7 +128,7 @@ read -r WIDTH HEIGHT < <(ruby -rjson -e '
   puts [size.fetch("width"), size.fetch("height")].join(" ")
 ' "$SNAPSHOT_PATH")
 
-.build/debug/loupe drag \
+.build/debug/loupe act drag \
   --udid "$DEVICE" \
   --from "$(ruby -e 'puts (ARGV.fetch(0).to_f / 2).round' "$WIDTH"),$(ruby -e 'puts (ARGV.fetch(0).to_f * 0.80).round' "$HEIGHT")" \
   --to "$(ruby -e 'puts (ARGV.fetch(0).to_f / 2).round' "$WIDTH"),$(ruby -e 'puts (ARGV.fetch(0).to_f * 0.35).round' "$HEIGHT")" \
@@ -161,9 +138,9 @@ read -r WIDTH HEIGHT < <(ruby -rjson -e '
 sleep 1
 
 fetch_snapshot
-.build/debug/loupe query "$SNAPSHOT_PATH" --test-id example.customerList >/tmp/loupe-runtime-list-query.json
+.build/debug/loupe ui query "$SNAPSHOT_PATH" --test-id example.customerList >/tmp/loupe-runtime-list-query.json
 
-.build/debug/loupe screenshot \
+.build/debug/loupe ui screenshot \
   --udid "$DEVICE" \
   --output "$SCREENSHOT_PATH"
 

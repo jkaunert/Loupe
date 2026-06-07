@@ -171,15 +171,15 @@ struct BatchMutationOptions {
     }
 
     static let usage = """
-    Usage: loupe set-many (--refs <refs> | --type-name <name> | --role <role>) <property> (--value <value> | --number <n> | --bool <bool> | --color <color> | --colors <colors>)
-           loupe set-many --type-name ListCollectionViewCell backgroundColor --colors FDE2E4_1 BEE1E6_1 --include-children 2
-           loupe set-many --refs n1,n2 alpha --number 0.5 --trace-dir /tmp/loupe-set-many
+    Usage: loupe ui set-many (--refs <refs> | --type-name <name> | --role <role>) <property> (--value <value> | --number <n> | --bool <bool> | --color <color> | --colors <colors>)
+           loupe ui set-many --type-name ListCollectionViewCell backgroundColor --colors FDE2E4_1 BEE1E6_1 --include-children 2
+           loupe ui set-many --refs n1,n2 alpha --number 0.5 --trace-dir /tmp/loupe-set-many
 
     Options:
       --host <url>              Runtime host. Defaults to current runtime or http://127.0.0.1:8765.
       --udid, --device <sim>    Validate the selected runtime belongs to this simulator.
       --bundle-id <id>          Resolve the runtime host by bundle id.
-      --trace-dir <path>        Write prev-snapshot.json, next-snapshot.json, diff.json, targets.json, and summary.json.
+      --trace-dir <path>        Write prev-snapshot.json, next-snapshot.json, diff.json, targets.json, responses.json, and summary.json.
       --output <path>           Write the compact JSON summary to a file.
       --visible-only            Match only visible nodes. Default.
       --all                     Include hidden nodes.

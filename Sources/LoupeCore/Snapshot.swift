@@ -5,8 +5,31 @@ public enum LoupeNodeKind: String, Codable, Equatable {
     case scene
     case window
     case view
-    case barButtonItem
-    case tabBarItem
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        switch rawValue {
+        case "application":
+            self = .application
+        case "scene":
+            self = .scene
+        case "window":
+            self = .window
+        case "view", "tabBarItem":
+            self = .view
+        default:
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Cannot initialize LoupeNodeKind from invalid String value \(rawValue)"
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 public struct LoupeStyle: Codable, Equatable {
@@ -127,10 +150,12 @@ public struct LoupeUIButtonProperties: Codable, Equatable {
 public struct LoupeUITextFieldProperties: Codable, Equatable {
     public var textAlignment: String?
     public var borderStyle: String?
+    public var isSecureTextEntry: Bool?
 
-    public init(textAlignment: String? = nil, borderStyle: String? = nil) {
+    public init(textAlignment: String? = nil, borderStyle: String? = nil, isSecureTextEntry: Bool? = nil) {
         self.textAlignment = textAlignment
         self.borderStyle = borderStyle
+        self.isSecureTextEntry = isSecureTextEntry
     }
 }
 
@@ -310,6 +335,72 @@ public struct LoupeUIActivityIndicatorProperties: Codable, Equatable {
     }
 }
 
+public struct LoupeUICollectionFlowLayoutProperties: Codable, Equatable {
+    public var itemSize: LoupeSize
+    public var estimatedItemSize: LoupeSize
+    public var usesEstimatedItemSize: Bool
+    public var usesAutomaticItemSize: Bool
+
+    public init(
+        itemSize: LoupeSize,
+        estimatedItemSize: LoupeSize,
+        usesEstimatedItemSize: Bool,
+        usesAutomaticItemSize: Bool
+    ) {
+        self.itemSize = itemSize
+        self.estimatedItemSize = estimatedItemSize
+        self.usesEstimatedItemSize = usesEstimatedItemSize
+        self.usesAutomaticItemSize = usesAutomaticItemSize
+    }
+}
+
+public struct LoupeUICollectionViewProperties: Codable, Equatable {
+    public var selfSizingInvalidation: String?
+    public var layoutClassName: String
+    public var delegateRespondsToSizeForItemAt: Bool
+    public var flowLayout: LoupeUICollectionFlowLayoutProperties?
+
+    public init(
+        selfSizingInvalidation: String? = nil,
+        layoutClassName: String,
+        delegateRespondsToSizeForItemAt: Bool,
+        flowLayout: LoupeUICollectionFlowLayoutProperties? = nil
+    ) {
+        self.selfSizingInvalidation = selfSizingInvalidation
+        self.layoutClassName = layoutClassName
+        self.delegateRespondsToSizeForItemAt = delegateRespondsToSizeForItemAt
+        self.flowLayout = flowLayout
+    }
+}
+
+public struct LoupeUITableViewProperties: Codable, Equatable {
+    public var selfSizingInvalidation: String?
+    public var rowHeight: Double
+    public var estimatedRowHeight: Double
+    public var usesAutomaticRowHeight: Bool
+    public var usesEstimatedRowHeight: Bool
+    public var delegateRespondsToHeightForRowAt: Bool
+    public var delegateRespondsToEstimatedHeightForRowAt: Bool
+
+    public init(
+        selfSizingInvalidation: String? = nil,
+        rowHeight: Double,
+        estimatedRowHeight: Double,
+        usesAutomaticRowHeight: Bool,
+        usesEstimatedRowHeight: Bool,
+        delegateRespondsToHeightForRowAt: Bool,
+        delegateRespondsToEstimatedHeightForRowAt: Bool
+    ) {
+        self.selfSizingInvalidation = selfSizingInvalidation
+        self.rowHeight = rowHeight
+        self.estimatedRowHeight = estimatedRowHeight
+        self.usesAutomaticRowHeight = usesAutomaticRowHeight
+        self.usesEstimatedRowHeight = usesEstimatedRowHeight
+        self.delegateRespondsToHeightForRowAt = delegateRespondsToHeightForRowAt
+        self.delegateRespondsToEstimatedHeightForRowAt = delegateRespondsToEstimatedHeightForRowAt
+    }
+}
+
 public struct LoupeUIImageViewProperties: Codable, Equatable {
     public var imageSize: LoupeSize?
 
@@ -400,6 +491,7 @@ public struct LoupeUILayoutConstraintProperties: Codable, Equatable {
 
 public struct LoupeUILayoutProperties: Codable, Equatable {
     public var translatesAutoresizingMaskIntoConstraints: Bool
+    public var isAmbiguousLayout: Bool
     public var hugging: LoupeUILayoutPriorities
     public var compressionResistance: LoupeUILayoutPriorities
     public var constraints: [LoupeUILayoutConstraintProperties]
@@ -408,6 +500,7 @@ public struct LoupeUILayoutProperties: Codable, Equatable {
 
     public init(
         translatesAutoresizingMaskIntoConstraints: Bool,
+        isAmbiguousLayout: Bool = false,
         hugging: LoupeUILayoutPriorities,
         compressionResistance: LoupeUILayoutPriorities,
         constraints: [LoupeUILayoutConstraintProperties] = [],
@@ -415,11 +508,33 @@ public struct LoupeUILayoutProperties: Codable, Equatable {
         affectingVerticalConstraints: [LoupeUILayoutConstraintProperties] = []
     ) {
         self.translatesAutoresizingMaskIntoConstraints = translatesAutoresizingMaskIntoConstraints
+        self.isAmbiguousLayout = isAmbiguousLayout
         self.hugging = hugging
         self.compressionResistance = compressionResistance
         self.constraints = constraints
         self.affectingHorizontalConstraints = affectingHorizontalConstraints
         self.affectingVerticalConstraints = affectingVerticalConstraints
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case translatesAutoresizingMaskIntoConstraints
+        case isAmbiguousLayout
+        case hugging
+        case compressionResistance
+        case constraints
+        case affectingHorizontalConstraints
+        case affectingVerticalConstraints
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        translatesAutoresizingMaskIntoConstraints = try container.decode(Bool.self, forKey: .translatesAutoresizingMaskIntoConstraints)
+        isAmbiguousLayout = try container.decodeIfPresent(Bool.self, forKey: .isAmbiguousLayout) ?? false
+        hugging = try container.decode(LoupeUILayoutPriorities.self, forKey: .hugging)
+        compressionResistance = try container.decode(LoupeUILayoutPriorities.self, forKey: .compressionResistance)
+        constraints = try container.decodeIfPresent([LoupeUILayoutConstraintProperties].self, forKey: .constraints) ?? []
+        affectingHorizontalConstraints = try container.decodeIfPresent([LoupeUILayoutConstraintProperties].self, forKey: .affectingHorizontalConstraints) ?? []
+        affectingVerticalConstraints = try container.decodeIfPresent([LoupeUILayoutConstraintProperties].self, forKey: .affectingVerticalConstraints) ?? []
     }
 }
 
@@ -464,6 +579,8 @@ public struct LoupeUIKitProperties: Codable, Equatable {
     public var userInteractionEnabled: Bool
     public var gestureRecognizers: [String]
     public var isFirstResponder: Bool
+    public var isFocused: Bool?
+    public var canBecomeFocused: Bool?
     public var windowLevel: Double?
     public var layout: LoupeUILayoutProperties?
     public var stackView: LoupeUIStackViewProperties?
@@ -481,6 +598,8 @@ public struct LoupeUIKitProperties: Codable, Equatable {
     public var pageControl: LoupeUIPageControlProperties?
     public var progressView: LoupeUIProgressViewProperties?
     public var activityIndicator: LoupeUIActivityIndicatorProperties?
+    public var collectionView: LoupeUICollectionViewProperties?
+    public var tableView: LoupeUITableViewProperties?
     public var imageView: LoupeUIImageViewProperties?
     public var pickerView: LoupeUIPickerViewProperties?
     public var tabBar: LoupeUITabBarProperties?
@@ -499,6 +618,8 @@ public struct LoupeUIKitProperties: Codable, Equatable {
         userInteractionEnabled: Bool,
         gestureRecognizers: [String] = [],
         isFirstResponder: Bool,
+        isFocused: Bool? = nil,
+        canBecomeFocused: Bool? = nil,
         windowLevel: Double? = nil,
         layout: LoupeUILayoutProperties? = nil,
         stackView: LoupeUIStackViewProperties? = nil,
@@ -516,6 +637,8 @@ public struct LoupeUIKitProperties: Codable, Equatable {
         pageControl: LoupeUIPageControlProperties? = nil,
         progressView: LoupeUIProgressViewProperties? = nil,
         activityIndicator: LoupeUIActivityIndicatorProperties? = nil,
+        collectionView: LoupeUICollectionViewProperties? = nil,
+        tableView: LoupeUITableViewProperties? = nil,
         imageView: LoupeUIImageViewProperties? = nil,
         pickerView: LoupeUIPickerViewProperties? = nil,
         tabBar: LoupeUITabBarProperties? = nil,
@@ -533,6 +656,8 @@ public struct LoupeUIKitProperties: Codable, Equatable {
         self.userInteractionEnabled = userInteractionEnabled
         self.gestureRecognizers = gestureRecognizers
         self.isFirstResponder = isFirstResponder
+        self.isFocused = isFocused
+        self.canBecomeFocused = canBecomeFocused
         self.windowLevel = windowLevel
         self.layout = layout
         self.stackView = stackView
@@ -550,6 +675,8 @@ public struct LoupeUIKitProperties: Codable, Equatable {
         self.pageControl = pageControl
         self.progressView = progressView
         self.activityIndicator = activityIndicator
+        self.collectionView = collectionView
+        self.tableView = tableView
         self.imageView = imageView
         self.pickerView = pickerView
         self.tabBar = tabBar
@@ -580,6 +707,31 @@ public struct LoupeNode: Codable, Equatable {
     public var uiKit: LoupeUIKitProperties?
     public var custom: [String: LoupeMetadataValue]
     public var children: [String]
+
+    private enum CodingKeys: String, CodingKey {
+        case ref
+        case parentRef
+        case kind
+        case typeName
+        case role
+        case testID
+        case label
+        case value
+        case placeholder
+        case text
+        case renderedText
+        case semanticText
+        case frame
+        case isVisible
+        case isEnabled
+        case isInteractive
+        case style
+        case accessibility
+        case runtime
+        case uiKit
+        case custom
+        case children
+    }
 
     public init(
         ref: String,
@@ -627,6 +779,33 @@ public struct LoupeNode: Codable, Equatable {
         self.uiKit = uiKit
         self.custom = custom
         self.children = children
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        ref = try container.decode(String.self, forKey: .ref)
+        parentRef = try container.decodeIfPresent(String.self, forKey: .parentRef)
+        kind = try container.decode(LoupeNodeKind.self, forKey: .kind)
+        typeName = try container.decode(String.self, forKey: .typeName)
+        role = try container.decodeIfPresent(String.self, forKey: .role)
+        testID = try container.decodeIfPresent(String.self, forKey: .testID)
+        label = try container.decodeIfPresent(String.self, forKey: .label)
+        value = try container.decodeIfPresent(String.self, forKey: .value)
+        placeholder = try container.decodeIfPresent(String.self, forKey: .placeholder)
+        text = try container.decodeIfPresent(String.self, forKey: .text)
+        renderedText = try container.decodeIfPresent(String.self, forKey: .renderedText)
+        semanticText = try container.decodeIfPresent(String.self, forKey: .semanticText)
+        frame = try container.decodeIfPresent(LoupeRect.self, forKey: .frame)
+        isVisible = try container.decode(Bool.self, forKey: .isVisible)
+        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        isInteractive = try container.decode(Bool.self, forKey: .isInteractive)
+        style = try container.decodeIfPresent(LoupeStyle.self, forKey: .style)
+        accessibility = try container.decodeIfPresent(LoupeAccessibility.self, forKey: .accessibility)
+        runtime = try container.decodeIfPresent(LoupeNodeRuntimeProperties.self, forKey: .runtime)
+        uiKit = try container.decodeIfPresent(LoupeUIKitProperties.self, forKey: .uiKit)
+        custom = try container.decodeIfPresent([String: LoupeMetadataValue].self, forKey: .custom) ?? [:]
+        children = try container.decodeIfPresent([String].self, forKey: .children) ?? []
     }
 }
 

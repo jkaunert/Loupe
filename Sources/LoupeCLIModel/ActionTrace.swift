@@ -61,6 +61,7 @@ package struct LoupeCLIActionTrace: Codable, Equatable {
     package var endPoint: LoupePoint?
     package var duration: Double?
     package var text: String?
+    package var press: String?
     package var resolvedPoint: LoupePoint?
     package var resolvedScreen: LoupeSize?
     package var resolvedSource: String?
@@ -78,6 +79,7 @@ package struct LoupeCLIActionTrace: Codable, Equatable {
         endPoint: LoupePoint?,
         duration: Double?,
         text: String?,
+        press: String? = nil,
         resolvedPoint: LoupePoint?,
         resolvedScreen: LoupeSize?,
         resolvedSource: String?,
@@ -94,11 +96,23 @@ package struct LoupeCLIActionTrace: Codable, Equatable {
         self.endPoint = endPoint
         self.duration = duration
         self.text = text
+        self.press = press
         self.resolvedPoint = resolvedPoint
         self.resolvedScreen = resolvedScreen
         self.resolvedSource = resolvedSource
         self.resolvedTarget = resolvedTarget
         self.recordedAt = recordedAt
+    }
+}
+
+package enum ActionTraceText {
+    package static let redactedInput = "<redacted>"
+
+    package static func recordable(command: String, text: String?) -> String? {
+        guard text != nil else {
+            return nil
+        }
+        return command == "type" ? redactedInput : text
     }
 }
 

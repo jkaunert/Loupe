@@ -389,6 +389,20 @@ static void LoupeHIDSendKey(id client, LoupeKeyboardMessageFunction keyboardMess
     LoupeHIDSendMessage(client, keyboardMessage(keyCode, direction));
 }
 
+static uint32_t LoupeHIDRemoteKeyCode(NSString *button)
+{
+    NSString *normalized = [[button lowercaseString] stringByReplacingOccurrencesOfString:@"-" withString:@""];
+    normalized = [normalized stringByReplacingOccurrencesOfString:@"_" withString:@""];
+    if ([normalized isEqualToString:@"up"]) { return 82; }
+    if ([normalized isEqualToString:@"down"]) { return 81; }
+    if ([normalized isEqualToString:@"left"]) { return 80; }
+    if ([normalized isEqualToString:@"right"]) { return 79; }
+    if ([normalized isEqualToString:@"select"] || [normalized isEqualToString:@"ok"] || [normalized isEqualToString:@"enter"]) { return 40; }
+    if ([normalized isEqualToString:@"menu"] || [normalized isEqualToString:@"back"]) { return 41; }
+    if ([normalized isEqualToString:@"playpause"] || [normalized isEqualToString:@"play"]) { return 44; }
+    return 0;
+}
+
 int LoupeHIDType(const char *udid, const char *text, char **errorMessage)
 {
     @autoreleasepool {
@@ -420,7 +434,7 @@ int LoupeHIDType(const char *udid, const char *text, char **errorMessage)
     }
 }
 
-int LoupeHIDPaste(const char *udid, char **errorMessage)
+int LoupeHIDPress(const char *udid, const char *button, char **errorMessage)
 {
     @autoreleasepool {
         id client = nil;
@@ -429,12 +443,16 @@ int LoupeHIDPaste(const char *udid, char **errorMessage)
             return 1;
         }
 
-        static uint32_t const LoupeHIDKeyLeftCommand = 227;
-        static uint32_t const LoupeHIDKeyV = 25;
-        LoupeHIDSendKey(client, functions.keyboardMessage, LoupeHIDKeyLeftCommand, LoupeHIDDirectionDown);
-        LoupeHIDSendKey(client, functions.keyboardMessage, LoupeHIDKeyV, LoupeHIDDirectionDown);
-        LoupeHIDSendKey(client, functions.keyboardMessage, LoupeHIDKeyV, LoupeHIDDirectionUp);
-        LoupeHIDSendKey(client, functions.keyboardMessage, LoupeHIDKeyLeftCommand, LoupeHIDDirectionUp);
+        NSString *input = [NSString stringWithUTF8String:button];
+        uint32_t keyCode = LoupeHIDRemoteKeyCode(input);
+        if (keyCode == 0) {
+            LoupeHIDSetError(errorMessage, [NSString stringWithFormat:@"unsupported press button: %@", input]);
+            return 1;
+        }
+
+        LoupeHIDSendKey(client, functions.keyboardMessage, keyCode, LoupeHIDDirectionDown);
+        usleep(40 * 1000);
+        LoupeHIDSendKey(client, functions.keyboardMessage, keyCode, LoupeHIDDirectionUp);
         usleep(25 * 1000);
         return 0;
     }
