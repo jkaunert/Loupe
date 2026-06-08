@@ -1244,6 +1244,7 @@ struct DesignComparisonTests {
                     kind: .view,
                     typeName: "UIView",
                     testID: "synthetic.banking.transfer.screen",
+                    semanticText: "Review transfer Unexpected copy",
                     frame: LoupeRect(x: 0, y: 0, width: 393, height: 852),
                     isVisible: true,
                     isEnabled: true,
@@ -1300,6 +1301,107 @@ struct DesignComparisonTests {
         #expect(comparison.issues.contains { issue in
             issue.kind == .unexpectedAppNode
                 && issue.testID == "synthetic.banking.transfer.extra"
+        })
+    }
+
+    @Test func matchedAggregateSplitTextChildrenDoNotCountAsUnexpectedNodes() {
+        let snapshot = LoupeSnapshot(
+            id: "split-static-text",
+            capturedAt: Date(timeIntervalSince1970: 0),
+            screen: LoupeScreen(size: LoupeSize(width: 393, height: 852), scale: 3),
+            rootRefs: ["root"],
+            nodes: [
+                "root": LoupeNode(
+                    ref: "root",
+                    parentRef: nil,
+                    kind: .view,
+                    typeName: "UIView",
+                    frame: LoupeRect(x: 0, y: 0, width: 393, height: 852),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false,
+                    children: ["terms", "terms-prefix", "terms-link", "extra"]
+                ),
+                "terms": LoupeNode(
+                    ref: "terms",
+                    parentRef: "root",
+                    kind: .view,
+                    typeName: "UIView",
+                    testID: "signup.terms",
+                    semanticText: "By continuing, you agree to Terms of Use and Privacy Policy.",
+                    frame: LoupeRect(x: 60, y: 608, width: 273, height: 28),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false
+                ),
+                "terms-prefix": LoupeNode(
+                    ref: "terms-prefix",
+                    parentRef: "root",
+                    kind: .view,
+                    typeName: "UILabel",
+                    role: "staticText",
+                    testID: "signup.terms.prefix",
+                    text: "By continuing, you agree to",
+                    frame: LoupeRect(x: 60, y: 611, width: 273, height: 11),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false
+                ),
+                "terms-link": LoupeNode(
+                    ref: "terms-link",
+                    parentRef: "root",
+                    kind: .view,
+                    typeName: "UILabel",
+                    role: "staticText",
+                    testID: "signup.terms.link",
+                    text: "Terms of Use and Privacy Policy.",
+                    frame: LoupeRect(x: 60, y: 621, width: 273, height: 12),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false
+                ),
+                "extra": LoupeNode(
+                    ref: "extra",
+                    parentRef: "root",
+                    kind: .view,
+                    typeName: "UILabel",
+                    role: "staticText",
+                    testID: "signup.extra.copy",
+                    text: "Extra copy",
+                    frame: LoupeRect(x: 60, y: 660, width: 273, height: 12),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: false
+                ),
+            ]
+        )
+        let design = LoupeDesignDocument(
+            frame: LoupeDesignFrame(name: "Sign Up", width: 393, height: 852),
+            nodes: [
+                LoupeDesignNode(
+                    id: "signup.terms",
+                    name: "Terms copy",
+                    role: "staticText",
+                    text: "By continuing, you agree to Terms of Use and Privacy Policy.",
+                    frame: LoupeRect(x: 60, y: 608, width: 273, height: 28)
+                ),
+            ]
+        )
+
+        let comparison = LoupeDesignComparator.compare(snapshot: snapshot, design: design)
+
+        #expect(comparison.matchedCount == 1)
+        #expect(!comparison.issues.contains { issue in
+            issue.kind == .unexpectedAppNode
+                && issue.testID == "signup.terms.prefix"
+        })
+        #expect(!comparison.issues.contains { issue in
+            issue.kind == .unexpectedAppNode
+                && issue.testID == "signup.terms.link"
+        })
+        #expect(comparison.issues.contains { issue in
+            issue.kind == .unexpectedAppNode
+                && issue.testID == "signup.extra.copy"
         })
     }
 

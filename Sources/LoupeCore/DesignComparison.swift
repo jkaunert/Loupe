@@ -427,6 +427,9 @@ public enum LoupeDesignComparator {
                     guard !isFullScreenWrapperNoise(node, design: design, snapshot: comparisonSnapshot, options: options) else {
                         return false
                     }
+                    guard !isMatchedAggregateChildNoise(node, matches: matches, snapshot: comparisonSnapshot) else {
+                        return false
+                    }
                     guard !isStatusChromeIndicatorNoise(node) else {
                         return false
                     }
@@ -563,7 +566,7 @@ public enum LoupeDesignComparator {
         options: LoupeDesignComparisonOptions
     ) -> Bool {
         guard !node.isInteractive else { return false }
-        guard trimmedNonEmpty(displayText(node)) == nil else { return false }
+        guard !hasOwnTextContent(node) else { return false }
         guard !node.children.isEmpty else { return false }
         guard let frame = node.frame else { return false }
 
@@ -571,6 +574,38 @@ public enum LoupeDesignComparator {
         let designRect = LoupeRect(x: 0, y: 0, width: design.frame.width, height: design.frame.height)
         let screenRect = LoupeRect(x: 0, y: 0, width: snapshot.screen.size.width, height: snapshot.screen.size.height)
         return rectDelta(frame, designRect) <= tolerance || rectDelta(frame, screenRect) <= tolerance
+    }
+
+    private static func isMatchedAggregateChildNoise(
+        _ node: LoupeNode,
+        matches: [LoupeDesignNodeMatch],
+        snapshot: LoupeSnapshot
+    ) -> Bool {
+        guard let testID = node.testID, !testID.isEmpty else { return false }
+        guard !node.isInteractive, node.children.isEmpty else { return false }
+        guard normalizedRole(node.role) == "statictext" else { return false }
+        guard let text = trimmedNonEmpty(displayText(node)) else { return false }
+        guard let frame = node.frame else { return false }
+
+        let nodeText = normalizedTextValue(text)
+
+        for match in matches {
+            let matchedIDs = [match.testID, match.designID].compactMap { $0 }
+            guard matchedIDs.contains(where: { testID.hasPrefix($0 + ".") }) else {
+                continue
+            }
+            guard let aggregate = snapshot.nodes[match.ref],
+                  let aggregateFrame = aggregate.frame,
+                  aggregateFrame.contains(frame, tolerance: 2),
+                  let aggregateText = trimmedNonEmpty(displayText(aggregate)) else {
+                continue
+            }
+            if normalizedTextValue(aggregateText).contains(nodeText) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private static func isStatusChromeIndicatorNoise(_ node: LoupeNode) -> Bool {
