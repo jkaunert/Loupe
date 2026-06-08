@@ -50,6 +50,9 @@ Required setup:
 - Give the baseline agent no Loupe CLI, snapshots, traces, view tree, or skill.
 - Use separate work directories and simulator devices.
 - Forbid both agents from reading previous `/tmp/loupe-*` comparison artifacts.
+- Preserve the design target PNG under the benchmark artifact workspace before
+  dispatching workers. A target regenerated from a fixture after `/tmp` cleanup
+  can be used for harness smoke only, not for quality or product claims.
 
 Score both outputs with the same artifacts:
 
