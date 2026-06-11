@@ -116,4 +116,49 @@ struct TreeRenderingTests {
         #expect(surfaceTree.nodes.values.allSatisfy { $0.testID != "example.offscreen.probe" })
         #expect(occlusionTree.nodes.values.contains { $0.testID == "example.offscreen.probe" })
     }
+
+    @Test func viewTreeMarksSwiftUIHostSummary() {
+        let snapshot = LoupeSnapshot(
+            id: "tree-swiftui-private",
+            capturedAt: Date(timeIntervalSince1970: 0),
+            screen: LoupeScreen(size: LoupeSize(width: 320, height: 640), scale: 2),
+            rootRefs: ["host"],
+            nodes: [
+                "host": LoupeNode(
+                    ref: "host",
+                    parentRef: nil,
+                    kind: .view,
+                    typeName: "_UIHostingView<ProfileView>",
+                    frame: LoupeRect(x: 0, y: 0, width: 320, height: 640),
+                    isVisible: true,
+                    isEnabled: true,
+                    isInteractive: true,
+                    swiftui: LoupeSwiftUIProperties(
+                        origin: "host",
+                        backingTypeName: "_UIHostingView<ProfileView>",
+                        rootTypeName: "ProfileView",
+                        properties: [
+                            LoupeSwiftUIProperty(
+                                name: "mode",
+                                typeName: "String",
+                                value: .string("Profile"),
+                                evidence: ["privateReflection", "propertyName"]
+                            ),
+                        ],
+                        evidence: ["backingTypeName"]
+                    )
+                ),
+            ]
+        )
+
+        let output = LoupeCLI.renderViewTree(
+            snapshot,
+            selector: nil,
+            depth: nil,
+            includeHidden: false
+        )
+
+        #expect(output.contains("host _UIHostingView<ProfileView> swiftui=host root=ProfileView props=mode=\"Profile\""))
+        #expect(!output.contains("swiftui=private"))
+    }
 }

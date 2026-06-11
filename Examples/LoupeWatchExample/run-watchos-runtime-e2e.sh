@@ -180,6 +180,7 @@ ruby -rjson -e '
   by_test_id = snapshot.fetch("nodes").values.each_with_object({}) { |node, map| map[node["testID"]] = node if node["testID"] }
   required_ids = [
     "watch.example.summary",
+    "watch.example.swiftui.screen",
     "watch.example.metric.heartRate",
     "watch.example.metric.pace",
     "watch.example.metrics",
@@ -200,6 +201,11 @@ ruby -rjson -e '
   abort "expected summary probe bounds width" unless summary_frame.fetch("width").to_f > 40
   abort "expected summary probe bounds height" unless summary_frame.fetch("height").to_f > 20
 
+  swiftui_screen = by_test_id.fetch("watch.example.swiftui.screen")
+  abort "expected watchOS SwiftUI screen probe label" unless swiftui_screen["label"] == "watchOS SwiftUI screen"
+  abort "expected watchOS SwiftUI probe metadata" unless swiftui_screen.dig("swiftui", "origin") == "probe"
+  abort "expected watchOS SwiftUI metadata flag" unless swiftui_screen.fetch("custom").dig("loupe.swiftUI", "value") == true
+
   metrics_frame = by_test_id.fetch("watch.example.metrics").fetch("frame")
   heart_frame = by_test_id.fetch("watch.example.metric.heartRate").fetch("frame")
   pace_frame = by_test_id.fetch("watch.example.metric.pace").fetch("frame")
@@ -216,6 +222,7 @@ ruby -rjson -e '
   view_tree = File.read(ARGV.fetch(6))
   ax_tree = File.read(ARGV.fetch(7))
   abort "expected watchOS view tree evidence" unless view_tree.include?("LoupeWatchProbe") && view_tree.include?("watch.example.summary")
+  abort "expected watchOS SwiftUI screen view tree evidence" unless view_tree.include?("watch.example.swiftui.screen") && view_tree.include?("swiftui=probe")
   abort "expected watchOS accessibility tree evidence" unless ax_tree.include?("watch.example.summary") && ax_tree.include?("Session controls")
 
   logs = JSON.parse(File.read(ARGV.fetch(8)))

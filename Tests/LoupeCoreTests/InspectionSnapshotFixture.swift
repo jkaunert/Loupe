@@ -30,7 +30,7 @@ enum InspectionSnapshotFixture {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: false,
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UIStackView",
                         tag: 0,
                         alpha: 1,
@@ -95,7 +95,7 @@ enum InspectionSnapshotFixture {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: true,
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UISwitch",
                         tag: 0,
                         alpha: 1,
@@ -118,7 +118,7 @@ enum InspectionSnapshotFixture {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: true,
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UIScrollView",
                         tag: 0,
                         alpha: 1,
@@ -180,7 +180,7 @@ enum InspectionSnapshotFixture {
             isVisible: false,
             isEnabled: true,
             isInteractive: true,
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: "UISearchBarTextField",
                 tag: 0,
                 alpha: 1,

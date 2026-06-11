@@ -84,13 +84,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         longListButton.testID("mac.example.openLongList")
         longListButton.bezelStyle = .rounded
 
+        let swiftUIButton = NSButton(title: "Open SwiftUI route", target: self, action: #selector(openSwiftUIRoute))
+        swiftUIButton.testID("mac.example.openSwiftUI")
+        swiftUIButton.bezelStyle = .rounded
+
         let list = makeList()
         list.testID("mac.example.list")
 
         stack.addArrangedSubview(title)
         stack.addArrangedSubview(statusLabel)
         stack.addArrangedSubview(button)
-        stack.addArrangedSubview(NSStackView(views: [detailButton, longListButton]))
+        stack.addArrangedSubview(NSStackView(views: [detailButton, longListButton, swiftUIButton]))
         stack.addArrangedSubview(makeDiagnosticControls())
         stack.addArrangedSubview(makeNativeAccessibilityFixture())
         stack.addArrangedSubview(makeSwiftUIFixture())
@@ -159,6 +163,27 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         NSLayoutConstraint.activate([
             scroll.widthAnchor.constraint(equalTo: stack.widthAnchor),
             scroll.heightAnchor.constraint(equalToConstant: 420),
+        ])
+        return root
+    }
+
+    private func makeSwiftUIRouteView() -> NSView {
+        let root = routeRoot(testID: "mac.example.swiftuiRoute")
+        let stack = routeStack(in: root)
+
+        let back = NSButton(title: "Back to workbench", target: self, action: #selector(showWorkbenchRoute))
+        back.testID("mac.example.swiftuiRoute.back")
+        back.bezelStyle = .rounded
+
+        let host = NSHostingView(rootView: MacSwiftUIScreenView())
+        host.testID("mac.example.swiftuiRoute.host")
+        host.translatesAutoresizingMaskIntoConstraints = false
+
+        stack.addArrangedSubview(back)
+        stack.addArrangedSubview(host)
+        NSLayoutConstraint.activate([
+            host.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            host.heightAnchor.constraint(equalToConstant: 430),
         ])
         return root
     }
@@ -465,6 +490,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         loupeLog("mac_example_long_list_route", metadata: ["screen": "longList"])
     }
 
+    @objc private func openSwiftUIRoute() {
+        window?.contentView = makeSwiftUIRouteView()
+        loupeLog("mac_example_swiftui_route", metadata: ["screen": "swiftUI"])
+    }
+
     @objc private func showWorkbenchRoute() {
         window?.contentView = makeWorkbenchView()
         loupeLog("mac_example_workbench_route", metadata: ["screen": "workbench"])
@@ -654,6 +684,7 @@ private struct LoupeFallbackProbeView: NSViewRepresentable {
         view.setAccessibilityRole(.group)
         view.wantsLayer = true
         view.layer?.backgroundColor = NSColor.clear.cgColor
+        publishSwiftUIMetadata(for: view)
         return view
     }
 
@@ -664,6 +695,19 @@ private struct LoupeFallbackProbeView: NSViewRepresentable {
         nsView.setAccessibilityRole(.group)
         nsView.wantsLayer = true
         nsView.layer?.backgroundColor = NSColor.clear.cgColor
+        publishSwiftUIMetadata(for: nsView)
+    }
+
+    private func publishSwiftUIMetadata(for view: NSView) {
+        NotificationCenter.default.post(
+            name: Notification.Name("dev.loupe.viewMetadata"),
+            object: view,
+            userInfo: [
+                "metadata": [
+                    "loupe.swiftUI": true,
+                ],
+            ]
+        )
     }
 }
 
@@ -686,6 +730,92 @@ private struct MacSwiftUIFixtureView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mac.example.swiftui")
         .localLoupeProbe("mac.example.swiftui.probe", label: "macOS SwiftUI probe")
+    }
+}
+
+private struct MacSwiftUIScreenView: View {
+    @State private var enabled = true
+    @State private var value = 0.42
+    @State private var mode = "Inspect"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("macOS SwiftUI Route")
+                .font(.title2.weight(.semibold))
+                .accessibilityIdentifier("mac.example.swiftuiRoute.title")
+
+            Text("Private hierarchy and accessibility probe coverage")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("mac.example.swiftuiRoute.subtitle")
+
+            MacSwiftUIRouteControls(enabled: $enabled, value: $value, mode: $mode)
+
+            Button(enabled ? "Disable route" : "Enable route") {
+                enabled.toggle()
+            }
+            .accessibilityIdentifier("mac.example.swiftuiRoute.button")
+
+            MacSwiftUIRouteRows()
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("mac.example.swiftuiRoute.screen")
+        .localLoupeProbe("mac.example.swiftuiRoute.probe", label: "macOS SwiftUI route probe")
+    }
+}
+
+private struct MacSwiftUIRouteControls: View {
+    @Binding var enabled: Bool
+    @Binding var value: Double
+    @Binding var mode: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle("Route toggle", isOn: $enabled)
+                .accessibilityIdentifier("mac.example.swiftuiRoute.toggle")
+
+            Slider(value: $value)
+                .frame(width: 220)
+                .accessibilityIdentifier("mac.example.swiftuiRoute.slider")
+
+            Picker("Mode", selection: $mode) {
+                Text("Inspect").tag("Inspect")
+                Text("Act").tag("Act")
+                Text("Trace").tag("Trace")
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 280)
+            .accessibilityIdentifier("mac.example.swiftuiRoute.mode")
+
+            ProgressView(value: value)
+                .frame(width: 220)
+                .accessibilityIdentifier("mac.example.swiftuiRoute.progress")
+        }
+        .padding(12)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityIdentifier("mac.example.swiftuiRoute.controls")
+        .localLoupeProbe("mac.example.swiftuiRoute.controls", label: "macOS SwiftUI route controls")
+    }
+}
+
+private struct MacSwiftUIRouteRows: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(1...3, id: \.self) { index in
+                HStack(spacing: 8) {
+                    Image(systemName: index == 1 ? "checkmark.circle" : "circle")
+                    Text("SwiftUI route row \(index)")
+                }
+                .accessibilityIdentifier("mac.example.swiftuiRoute.row.\(index)")
+                .localLoupeProbe("mac.example.swiftuiRoute.row.\(index)", label: "macOS SwiftUI route row \(index)")
+            }
+        }
+        .padding(12)
+        .background(.quaternary.opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityIdentifier("mac.example.swiftuiRoute.rows")
+        .localLoupeProbe("mac.example.swiftuiRoute.rows", label: "macOS SwiftUI route rows")
     }
 }
 

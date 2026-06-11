@@ -115,7 +115,7 @@ public enum LoupeSurfaceVisibility {
         if node.isInteractive, node.accessibility?.isElement == true {
             return true
         }
-        if node.uiKit?.imageView != nil {
+        if node.platform?.imageView != nil {
             return true
         }
         if let color = node.style?.backgroundColor, color.alpha >= 0.95 {
@@ -148,10 +148,10 @@ public enum LoupeSurfaceVisibility {
 
     private static func isActiveTextInput(_ node: LoupeNode, on screenRect: LoupeRect) -> Bool {
         guard node.kind == .view,
-              node.role == "textField" || node.uiKit?.textField != nil || node.uiKit?.textView != nil,
-              node.uiKit?.isFirstResponder == true,
-              node.uiKit?.isHidden == false,
-              (node.uiKit?.alpha ?? 1) > 0.01,
+              node.role == "textField" || node.platform?.textField != nil || node.platform?.textView != nil,
+              node.platform?.isFirstResponder == true,
+              node.platform?.isHidden == false,
+              (node.platform?.alpha ?? 1) > 0.01,
               let frame = node.frame,
               frame.intersects(screenRect)
         else {

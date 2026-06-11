@@ -122,7 +122,7 @@ curl -sS "$HOST/health" | grep -q LoupeKit
 .build/debug/loupe app info --host "$HOST" --udid "$DEVICE" > "$RUNTIME_PATH"
 grep -q '"simulatorUDID"' "$RUNTIME_PATH"
 fetch_snapshot
-grep -q '"uiKit"' "$SNAPSHOT_PATH"
+grep -q '"uikit"' "$SNAPSHOT_PATH"
 grep -q '"accessibility"' "$SNAPSHOT_PATH"
 read -r WIDTH HEIGHT < <(ruby -rjson -e '
   snapshot = JSON.parse(File.read(ARGV.fetch(0)))

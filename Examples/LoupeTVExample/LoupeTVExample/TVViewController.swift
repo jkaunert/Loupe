@@ -91,6 +91,16 @@ final class TVViewController: UIViewController {
         longListButton.titleLabel?.font = .systemFont(ofSize: 30, weight: .semibold)
         longListButton.addTarget(self, action: #selector(openLongListRoute), for: .primaryActionTriggered)
 
+        let swiftUIButton = UIButton(type: .system)
+        swiftUIButton.accessibilityIdentifier = "tv.example.openSwiftUI"
+        swiftUIButton.isAccessibilityElement = true
+        swiftUIButton.accessibilityLabel = "Open SwiftUI route"
+        swiftUIButton.setTitle("Open SwiftUI route", for: .normal)
+        swiftUIButton.setTitleColor(.white, for: .normal)
+        swiftUIButton.setTitleColor(UIColor(red: 0.74, green: 0.91, blue: 1, alpha: 1), for: .focused)
+        swiftUIButton.titleLabel?.font = .systemFont(ofSize: 30, weight: .semibold)
+        swiftUIButton.addTarget(self, action: #selector(openSwiftUIRoute), for: .primaryActionTriggered)
+
         let list = makeList()
         list.accessibilityIdentifier = "tv.example.collection"
 
@@ -111,6 +121,7 @@ final class TVViewController: UIViewController {
             legacyButton,
             detailButton,
             longListButton,
+            swiftUIButton,
             badContrast,
             list,
             emptyFeed,
@@ -237,6 +248,41 @@ final class TVViewController: UIViewController {
         setNeedsFocusUpdate()
     }
 
+    private func buildSwiftUIRouteView() {
+        removeSwiftUIHostController()
+        view.subviews.forEach { $0.removeFromSuperview() }
+        view.accessibilityIdentifier = "tv.example.swiftuiRoute"
+        view.backgroundColor = UIColor(red: 0.06, green: 0.08, blue: 0.11, alpha: 1)
+
+        let back = UIButton(type: .system)
+        back.accessibilityIdentifier = "tv.example.swiftuiRoute.back"
+        back.isAccessibilityElement = true
+        back.accessibilityLabel = "Back to workbench"
+        back.setTitle("Back to workbench", for: .normal)
+        back.setTitleColor(.white, for: .normal)
+        back.setTitleColor(UIColor(red: 0.74, green: 0.91, blue: 1, alpha: 1), for: .focused)
+        back.titleLabel?.font = .systemFont(ofSize: 30, weight: .semibold)
+        back.addTarget(self, action: #selector(showWorkbenchRoute), for: .primaryActionTriggered)
+
+        let host = makeSwiftUIRouteFixture()
+
+        let stack = UIStackView(arrangedSubviews: [back, host])
+        stack.axis = .vertical
+        stack.alignment = .leading
+        stack.spacing = 32
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 96),
+            stack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -96),
+            stack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 72),
+            host.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            host.heightAnchor.constraint(equalToConstant: 520),
+        ])
+        setNeedsFocusUpdate()
+    }
+
     private func makeRouteScroll(testID: String, rowPrefix: String, rows: Int) -> UIScrollView {
         let scrollView = UIScrollView()
         scrollView.accessibilityIdentifier = testID
@@ -348,6 +394,17 @@ final class TVViewController: UIViewController {
         return controller.view
     }
 
+    private func makeSwiftUIRouteFixture() -> UIView {
+        let controller = UIHostingController(rootView: TVSwiftUIScreenView())
+        controller.view.backgroundColor = .clear
+        controller.view.accessibilityIdentifier = "tv.example.swiftuiRoute.host"
+        controller.view.translatesAutoresizingMaskIntoConstraints = false
+        addChild(controller)
+        controller.didMove(toParent: self)
+        swiftUIHostController = controller
+        return controller.view
+    }
+
     private func removeSwiftUIHostController() {
         guard let controller = swiftUIHostController else {
             return
@@ -362,6 +419,7 @@ final class TVViewController: UIViewController {
         UserDefaults.standard.set(false, forKey: "tv-new-nav")
         UserDefaults.standard.set(true, forKey: "tv-empty-feed")
         UserDefaults.standard.set(false, forKey: "tv-error-route")
+        UserDefaults.standard.set(false, forKey: "tv-swiftui-route")
 
         loupeLog(
             "tv_example_visible",
@@ -444,6 +502,11 @@ final class TVViewController: UIViewController {
     }
 
     @objc private func openLegacyFlow() {
+        if UserDefaults.standard.bool(forKey: "tv-swiftui-route") {
+            buildSwiftUIRouteView()
+            loupeLog("tv_example_swiftui_route", metadata: ["screen": "swiftUI"])
+            return
+        }
         if UserDefaults.standard.bool(forKey: "tv-error-route") {
             buildErrorRouteView()
             loupeLog(
@@ -486,6 +549,11 @@ final class TVViewController: UIViewController {
             rows: 42
         )
         loupeLog("tv_example_long_list_route", metadata: ["screen": "longList"])
+    }
+
+    @objc private func openSwiftUIRoute() {
+        buildSwiftUIRouteView()
+        loupeLog("tv_example_swiftui_route", metadata: ["screen": "swiftUI"])
     }
 
     @objc private func showWorkbenchRoute() {
@@ -595,6 +663,7 @@ private struct LoupeFallbackProbeView: UIViewRepresentable {
         view.isAccessibilityElement = true
         view.accessibilityLabel = label ?? id
         view.backgroundColor = .clear
+        publishSwiftUIMetadata(for: view)
         return view
     }
 
@@ -603,6 +672,19 @@ private struct LoupeFallbackProbeView: UIViewRepresentable {
         uiView.isAccessibilityElement = true
         uiView.accessibilityLabel = label ?? id
         uiView.backgroundColor = .clear
+        publishSwiftUIMetadata(for: uiView)
+    }
+
+    private func publishSwiftUIMetadata(for view: UIView) {
+        NotificationCenter.default.post(
+            name: Notification.Name("dev.loupe.viewMetadata"),
+            object: view,
+            userInfo: [
+                "metadata": [
+                    "loupe.swiftUI": true,
+                ],
+            ]
+        )
     }
 }
 
@@ -626,5 +708,89 @@ private struct TVSwiftUIFixtureView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tv.example.swiftui")
         .localLoupeProbe("tv.example.swiftui.probe", label: "tvOS SwiftUI probe")
+    }
+}
+
+private struct TVSwiftUIScreenView: View {
+    @State private var enabled = true
+    @State private var progress = 0.58
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("tvOS SwiftUI Route")
+                .font(.largeTitle.weight(.semibold))
+                .accessibilityIdentifier("tv.example.swiftuiRoute.title")
+
+            Text("Remote focus, host detection, and private hierarchy evidence")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("tv.example.swiftuiRoute.subtitle")
+
+            HStack(spacing: 18) {
+                TVSwiftUIMetric(title: "Focus", value: "Ready")
+                    .accessibilityIdentifier("tv.example.swiftuiRoute.metric.focus")
+                    .localLoupeProbe("tv.example.swiftuiRoute.metric.focus", label: "tvOS SwiftUI focus metric")
+                TVSwiftUIMetric(title: "Rows", value: "3")
+                    .accessibilityIdentifier("tv.example.swiftuiRoute.metric.rows")
+                    .localLoupeProbe("tv.example.swiftuiRoute.metric.rows", label: "tvOS SwiftUI rows metric")
+            }
+            .accessibilityIdentifier("tv.example.swiftuiRoute.metrics")
+            .localLoupeProbe("tv.example.swiftuiRoute.metrics", label: "tvOS SwiftUI metrics")
+
+            ProgressView(value: progress)
+                .frame(width: 420)
+                .accessibilityIdentifier("tv.example.swiftuiRoute.progress")
+
+            Button(enabled ? "Disable route" : "Enable route") {
+                enabled.toggle()
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("tv.example.swiftuiRoute.button")
+
+            TVSwiftUIRouteRows()
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("tv.example.swiftuiRoute.screen")
+        .localLoupeProbe("tv.example.swiftuiRoute.probe", label: "tvOS SwiftUI route probe")
+    }
+}
+
+private struct TVSwiftUIRouteRows: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(1...3, id: \.self) { index in
+                HStack(spacing: 10) {
+                    Image(systemName: index == 1 ? "checkmark.circle" : "circle")
+                    Text("SwiftUI route row \(index)")
+                }
+                .font(.title3)
+                .padding(.vertical, 4)
+                .accessibilityIdentifier("tv.example.swiftuiRoute.row.\(index)")
+            }
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityIdentifier("tv.example.swiftuiRoute.rows")
+        .localLoupeProbe("tv.example.swiftuiRoute.rows", label: "tvOS SwiftUI route rows")
+    }
+}
+
+private struct TVSwiftUIMetric: View {
+    var title: String
+    var value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.title2.weight(.semibold))
+        }
+        .padding(16)
+        .frame(width: 180, alignment: .leading)
+        .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
     }
 }

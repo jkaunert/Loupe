@@ -66,17 +66,17 @@ import Testing
         let diff = LoupeCLI.snapshotDiff(before: before, after: after)
 
         #expect(diff.changed[0].changes.contains { change in
-            change.field == "uiKit.scrollView.contentOffset"
+            change.field == "uikit.scrollView.contentOffset"
                 && change.before == "0,0"
                 && change.after == "0,240"
         })
         #expect(diff.changed[0].changes.contains { change in
-            change.field == "uiKit.scrollView.isPagingEnabled"
+            change.field == "uikit.scrollView.isPagingEnabled"
                 && change.before == "false"
                 && change.after == "true"
         })
         #expect(diff.changed[0].changes.contains { change in
-            change.field == "uiKit.scrollView.bounces"
+            change.field == "uikit.scrollView.bounces"
                 && change.before == "true"
                 && change.after == "false"
         })
@@ -95,12 +95,12 @@ import Testing
         let diff = LoupeCLI.snapshotDiff(before: before, after: after)
 
         #expect(diff.changed[0].changes.contains { change in
-            change.field == "uiKit.isFocused"
+            change.field == "uikit.isFocused"
                 && change.before == "true"
                 && change.after == "false"
         })
         #expect(!diff.changed[0].changes.contains { change in
-            change.field == "uiKit.canBecomeFocused"
+            change.field == "uikit.canBecomeFocused"
         })
     }
 
@@ -163,7 +163,7 @@ import Testing
             isVisible: true,
             isEnabled: true,
             isInteractive: true,
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: "UIScrollView",
                 tag: 0,
                 alpha: 1,
@@ -199,7 +199,7 @@ import Testing
             isVisible: true,
             isEnabled: true,
             isInteractive: true,
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: "UIButton",
                 tag: 0,
                 alpha: 1,

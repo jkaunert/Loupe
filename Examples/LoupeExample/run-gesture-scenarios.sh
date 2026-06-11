@@ -121,7 +121,7 @@ GRABBER_REF="$(query_ref example.bottomSheet.grabber)"
 fetch_snapshot
 EXPANDED_Y="$(inspect_value example.bottomSheet.scrollView node.frame.y)"
 EXPANDED_HEIGHT="$(inspect_value example.bottomSheet.scrollView node.frame.height)"
-CONTENT_HEIGHT="$(inspect_value example.bottomSheet.scrollView node.uiKit.scrollView.contentSize.height)"
+CONTENT_HEIGHT="$(inspect_value example.bottomSheet.scrollView node.uikit.scrollView.contentSize.height)"
 ruby -e '
   moved_up = ARGV.fetch(0).to_f < ARGV.fetch(1).to_f - 120
   grew = ARGV.fetch(2).to_f > ARGV.fetch(3).to_f + 120
@@ -129,7 +129,7 @@ ruby -e '
   exit(moved_up && grew && long_list ? 0 : 1)
 ' "$EXPANDED_Y" "$COLLAPSED_Y" "$EXPANDED_HEIGHT" "$COLLAPSED_HEIGHT" "$CONTENT_HEIGHT"
 
-BEFORE_OFFSET="$(inspect_value example.bottomSheet.scrollView node.uiKit.scrollView.contentOffset.y)"
+BEFORE_OFFSET="$(inspect_value example.bottomSheet.scrollView node.uikit.scrollView.contentOffset.y)"
 read -r SCROLL_X SCROLL_FROM_Y SCROLL_TO_Y < <(.build/debug/loupe ui node "$SNAPSHOT_PATH" --test-id example.bottomSheet.scrollView |
   ruby -rjson -e '
     frame = JSON.parse(STDIN.read).fetch("node").fetch("frame")
@@ -140,7 +140,7 @@ read -r SCROLL_X SCROLL_FROM_Y SCROLL_TO_Y < <(.build/debug/loupe ui node "$SNAP
   ')
 .build/debug/loupe act swipe --host "$HOST" --udid "$DEVICE" --from "$SCROLL_X,$SCROLL_FROM_Y" --to "$SCROLL_X,$SCROLL_TO_Y" --duration 0.5 --trace-dir "$TRACE_DIR"
 fetch_snapshot
-AFTER_OFFSET="$(inspect_value example.bottomSheet.scrollView node.uiKit.scrollView.contentOffset.y)"
+AFTER_OFFSET="$(inspect_value example.bottomSheet.scrollView node.uikit.scrollView.contentOffset.y)"
 ruby -e 'exit(ARGV.fetch(1).to_f > ARGV.fetch(0).to_f + 20 ? 0 : 1)' "$BEFORE_OFFSET" "$AFTER_OFFSET"
 
 echo "gesture scenario passed"

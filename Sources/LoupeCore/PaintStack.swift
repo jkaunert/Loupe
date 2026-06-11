@@ -89,7 +89,7 @@ public enum LoupePaintStackBuilder {
                     parentRef: node.parentRef,
                     depth: depths[node.ref] ?? 0,
                     typeName: node.typeName,
-                    className: node.uiKit?.className,
+                    className: node.platform?.className,
                     role: node.role,
                     testID: node.testID,
                     text: LoupeObservationCompactor.displayText(for: node),

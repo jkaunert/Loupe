@@ -11,8 +11,8 @@ struct SnapshotInspectionTests {
         )
 
         #expect(inspection.node.testID == "components.switch")
-        #expect(inspection.node.uiKit?.className == "UISwitch")
-        #expect(inspection.node.uiKit?.switchControl?.isOn == true)
+        #expect(inspection.node.platform?.className == "UISwitch")
+        #expect(inspection.node.platform?.switchControl?.isOn == true)
         #expect(inspection.parent?.testID == "components.row")
         #expect(inspection.siblings.map { $0.testID } == ["components.label"])
     }
@@ -34,7 +34,7 @@ struct SnapshotInspectionTests {
         let inspection = try #require(
             LoupeSnapshotInspector.inspect(.testID("bottomSheet.results"), in: snapshot)
         )
-        let scrollView = try #require(inspection.node.uiKit?.scrollView)
+        let scrollView = try #require(inspection.node.platform?.scrollView)
 
         #expect(inspection.node.role == "scrollView")
         #expect(inspection.node.frame?.height == 420)
@@ -53,8 +53,8 @@ struct SnapshotInspectionTests {
         let inspection = try #require(
             LoupeSnapshotInspector.inspect(.testID("components.row"), in: snapshot)
         )
-        let layout = try #require(inspection.node.uiKit?.layout)
-        let stackView = try #require(inspection.node.uiKit?.stackView)
+        let layout = try #require(inspection.node.platform?.layout)
+        let stackView = try #require(inspection.node.platform?.stackView)
 
         #expect(layout.translatesAutoresizingMaskIntoConstraints == false)
         #expect(layout.isAmbiguousLayout == true)
@@ -92,7 +92,7 @@ struct SnapshotInspectionTests {
 
         #expect(inspection.node.ref == "search")
         #expect(inspection.node.isVisible == true)
-        #expect(inspection.node.uiKit?.isFirstResponder == true)
+        #expect(inspection.node.platform?.isFirstResponder == true)
         #expect(inspection.node.text == "Invoice")
     }
 

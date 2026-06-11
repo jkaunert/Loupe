@@ -38,6 +38,7 @@ enum LoupeAppKitSwiftUIProbeBackingView {
     static func update(_ nsView: NSView, id: String, label: String?) {
         nsView.testID(id)
         nsView.testProperty("loupe.probe", true)
+        nsView.testProperty("loupe.swiftUI", true)
         nsView.setAccessibilityElement(true)
         nsView.setAccessibilityLabel(label ?? id)
         nsView.setAccessibilityRole(.group)

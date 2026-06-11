@@ -30,7 +30,7 @@ enum GestureScrollVerifier {
                 guard node.isVisible,
                       let frame = node.frame,
                       contains(start, in: frame),
-                      let scrollView = node.uiKit?.scrollView,
+                      let scrollView = node.platform?.scrollView,
                       scrollView.isScrollEnabled else {
                     return nil
                 }
@@ -63,7 +63,7 @@ enum GestureScrollVerifier {
     }
 
     static func didChange(_ baseline: GestureScrollBaseline, after snapshot: LoupeSnapshot, tolerance: Double = 1) -> Bool {
-        guard let scrollView = snapshot.nodes[baseline.ref]?.uiKit?.scrollView else {
+        guard let scrollView = snapshot.nodes[baseline.ref]?.platform?.scrollView else {
             return false
         }
         let before = offset(axis: baseline.axis, point: baseline.beforeOffset)

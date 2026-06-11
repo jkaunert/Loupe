@@ -40,7 +40,8 @@ private struct LoupeWatchProbeModifier: ViewModifier {
             Loupe.registerProbe(
                 id,
                 label: label,
-                frame: loupeRect(from: frame)
+                frame: loupeRect(from: frame),
+                metadata: ["loupe.swiftUI": .bool(true)]
             )
         }
     }

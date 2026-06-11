@@ -286,7 +286,7 @@ struct LayoutAuditTests {
                         isElement: false
                     ),
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "ConflictingUserClassName",
                         tag: 0,
                         alpha: 1,
@@ -311,7 +311,7 @@ struct LayoutAuditTests {
                     isEnabled: true,
                     isInteractive: false,
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UIImageView",
                         tag: 0,
                         alpha: 1,
@@ -379,7 +379,7 @@ struct LayoutAuditTests {
                         isElement: false
                     ),
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.example.App"),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "_UITableCellAccessoryButton",
                         tag: 0,
                         alpha: 1,
@@ -404,7 +404,7 @@ struct LayoutAuditTests {
                     isEnabled: true,
                     isInteractive: false,
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.example.App"),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UIImageView",
                         tag: 0,
                         alpha: 1,
@@ -711,7 +711,7 @@ struct LayoutAuditTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: true,
-                    uiKit: scrollViewProperties(className: "HostingScrollView", contentSize: LoupeSize(width: 390, height: 16))
+                    uikit: scrollViewProperties(className: "HostingScrollView", contentSize: LoupeSize(width: 390, height: 16))
                 ),
                 "search-field": LoupeNode(
                     ref: "search-field",
@@ -724,7 +724,7 @@ struct LayoutAuditTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: true,
-                    uiKit: textFieldProperties(className: "UISearchBarTextField"),
+                    uikit: textFieldProperties(className: "UISearchBarTextField"),
                     children: ["placeholder"]
                 ),
                 "scope-control": LoupeNode(
@@ -738,7 +738,7 @@ struct LayoutAuditTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: true,
-                    uiKit: segmentedControlProperties(className: "UISegmentedControl")
+                    uikit: segmentedControlProperties(className: "UISegmentedControl")
                 ),
                 "text-canvas": LoupeNode(
                     ref: "text-canvas",
@@ -749,7 +749,7 @@ struct LayoutAuditTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: false,
-                    uiKit: plainUIKitProperties(className: "_UITextLayoutCanvasView"),
+                    uikit: plainUIKitProperties(className: "_UITextLayoutCanvasView"),
                     children: ["text-fragment"]
                 ),
                 "text-fragment": LoupeNode(
@@ -761,7 +761,7 @@ struct LayoutAuditTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: false,
-                    uiKit: plainUIKitProperties(className: "_UITextLayoutFragmentView")
+                    uikit: plainUIKitProperties(className: "_UITextLayoutFragmentView")
                 ),
                 "placeholder": LoupeNode(
                     ref: "placeholder",
@@ -775,7 +775,7 @@ struct LayoutAuditTests {
                     isEnabled: true,
                     isInteractive: false,
                     style: LoupeStyle(textColor: LoupeColor(red: 0.24, green: 0.24, blue: 0.24, alpha: 0.6)),
-                    uiKit: labelProperties(className: "UISearchBarTextFieldLabel")
+                    uikit: labelProperties(className: "UISearchBarTextFieldLabel")
                 ),
                 "low-contrast-title": LoupeNode(
                     ref: "low-contrast-title",
@@ -789,7 +789,7 @@ struct LayoutAuditTests {
                     isEnabled: true,
                     isInteractive: false,
                     style: LoupeStyle(textColor: LoupeColor(red: 0.6, green: 0.6, blue: 0.6, alpha: 1)),
-                    uiKit: labelProperties(className: "UILabel")
+                    uikit: labelProperties(className: "UILabel")
                 ),
             ]
         )
@@ -871,7 +871,7 @@ struct LayoutAuditTests {
                     isEnabled: true,
                     isInteractive: false,
                     style: LoupeStyle(textColor: LoupeColor(red: 1, green: 1, blue: 1, alpha: 1)),
-                    uiKit: labelProperties(className: "NSTextField")
+                    uikit: labelProperties(className: "NSTextField")
                 ),
                 "low-contrast-label": LoupeNode(
                     ref: "low-contrast-label",
@@ -885,7 +885,7 @@ struct LayoutAuditTests {
                     isEnabled: true,
                     isInteractive: false,
                     style: LoupeStyle(textColor: LoupeColor(red: 0.8, green: 0.8, blue: 0.8, alpha: 1)),
-                    uiKit: labelProperties(className: "NSTextField")
+                    uikit: labelProperties(className: "NSTextField")
                 ),
             ]
         )
@@ -929,7 +929,7 @@ struct LayoutAuditTests {
                     isInteractive: true,
                     style: LoupeStyle(textColor: LoupeColor(red: 0.7, green: 0.7, blue: 0.7, alpha: 1)),
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UIButton",
                         tag: 0,
                         alpha: 1,
@@ -956,7 +956,7 @@ struct LayoutAuditTests {
                     isInteractive: false,
                     style: LoupeStyle(textColor: LoupeColor(red: 0.7, green: 0.7, blue: 0.7, alpha: 1)),
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-                    uiKit: labelProperties(className: "UIButtonLabel")
+                    uikit: labelProperties(className: "UIButtonLabel")
                 ),
                 "standalone-label": LoupeNode(
                     ref: "standalone-label",
@@ -971,7 +971,7 @@ struct LayoutAuditTests {
                     isInteractive: false,
                     style: LoupeStyle(textColor: LoupeColor(red: 0.7, green: 0.7, blue: 0.7, alpha: 1)),
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-                    uiKit: labelProperties(className: "UILabel")
+                    uikit: labelProperties(className: "UILabel")
                 ),
             ]
         )
@@ -1048,7 +1048,7 @@ struct LayoutAuditTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: true,
-                    uiKit: tableViewProperties(className: "UITableView"),
+                    uikit: tableViewProperties(className: "UITableView"),
                     children: ["table-content"]
                 ),
                 "table-content": LoupeNode(
@@ -1061,7 +1061,7 @@ struct LayoutAuditTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: true,
-                    uiKit: tableViewProperties(className: "UITableViewWrapperView")
+                    uikit: tableViewProperties(className: "UITableViewWrapperView")
                 ),
                 "focus-parent": LoupeNode(
                     ref: "focus-parent",
@@ -1072,7 +1072,7 @@ struct LayoutAuditTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: false,
-                    uiKit: plainUIKitProperties(className: "_UIFloatingContentTransformView"),
+                    uikit: plainUIKitProperties(className: "_UIFloatingContentTransformView"),
                     children: ["focus-halo"]
                 ),
                 "focus-halo": LoupeNode(
@@ -1084,7 +1084,7 @@ struct LayoutAuditTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: false,
-                    uiKit: plainUIKitProperties(className: "_UIFloatingContentCornerRadiusAnimatingView")
+                    uikit: plainUIKitProperties(className: "_UIFloatingContentCornerRadiusAnimatingView")
                 ),
             ]
         )
@@ -1558,7 +1558,7 @@ struct LayoutAuditTests {
             isVisible: true,
             isEnabled: true,
             isInteractive: true,
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: "UIButton",
                 tag: 0,
                 alpha: 1,
@@ -1593,7 +1593,7 @@ struct LayoutAuditTests {
                 frame: frame,
                 isElement: false
             ),
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: "UIImageView",
                 tag: 0,
                 alpha: 1,
@@ -1640,7 +1640,7 @@ struct LayoutAuditTests {
             isEnabled: true,
             isInteractive: isInteractive,
             runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: typeName,
                 tag: 0,
                 alpha: 1,
@@ -1674,7 +1674,7 @@ struct LayoutAuditTests {
                 frame: frame,
                 isElement: true
             ),
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: "ImageView",
                 tag: 0,
                 alpha: 1,
@@ -1709,7 +1709,7 @@ struct LayoutAuditTests {
             isVisible: true,
             isEnabled: true,
             isInteractive: true,
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: "UITabBarButton",
                 tag: 0,
                 alpha: 1,
@@ -1852,7 +1852,7 @@ struct LayoutAuditTests {
                 isElement: true
             ),
             runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.AppKit"),
-            uiKit: LoupeUIKitProperties(
+            appkit: LoupeAppKitProperties(storage: LoupeUIKitProperties(
                 className: "NSTextField",
                 tag: 0,
                 alpha: 1,
@@ -1863,7 +1863,7 @@ struct LayoutAuditTests {
                 isFirstResponder: false,
                 label: LoupeUILabelProperties(numberOfLines: 1, lineBreakMode: "byClipping"),
                 textField: LoupeUITextFieldProperties(textAlignment: "left", borderStyle: "none")
-            )
+            ))
         )
     }
 

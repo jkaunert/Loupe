@@ -14,7 +14,7 @@ public struct LoupeNodeSummary: Codable, Equatable {
     public init(node: LoupeNode, isVisible: Bool? = nil) {
         ref = node.ref
         typeName = node.typeName
-        className = node.uiKit?.className
+        className = node.platform?.className
         role = node.role
         text = LoupeObservationCompactor.displayText(for: node)
         testID = node.testID

@@ -25,46 +25,46 @@ enum MutationPropertySupport {
         if supportsUITextFieldSpecificMutations(node) {
             properties += ["placeholder", "secureTextEntry"]
         }
-        if node.uiKit?.button != nil || node.role == "button" {
+        if node.platform?.button != nil || node.role == "button" {
             properties += ["title"]
         }
-        if node.uiKit?.switchControl != nil || node.role == "switch" {
+        if node.platform?.switchControl != nil || node.role == "switch" {
             properties += ["enabled", "selected", "highlighted", "switch.isOn"]
-        } else if node.uiKit?.control != nil || node.isInteractive {
+        } else if node.platform?.control != nil || node.isInteractive {
             properties += ["enabled", "selected", "highlighted"]
         }
-        if node.uiKit?.slider != nil || node.role == "slider" {
+        if node.platform?.slider != nil || node.role == "slider" {
             properties += ["slider.value", "slider.minimumValue", "slider.maximumValue"]
         }
-        if node.uiKit?.stepper != nil || node.role == "stepper" {
+        if node.platform?.stepper != nil || node.role == "stepper" {
             properties += ["stepper.value", "stepper.minimumValue", "stepper.maximumValue", "stepper.stepValue"]
         }
-        if node.uiKit?.segmentedControl != nil || node.role == "segmentedControl" {
+        if node.platform?.segmentedControl != nil || node.role == "segmentedControl" {
             properties += ["segmentedControl.selectedSegmentIndex"]
         }
-        if node.uiKit?.pageControl != nil || node.role == "pageControl" {
+        if node.platform?.pageControl != nil || node.role == "pageControl" {
             properties += ["pageControl.currentPage", "pageControl.numberOfPages"]
         }
-        if node.uiKit?.progressView != nil || node.role == "progress" {
+        if node.platform?.progressView != nil || node.role == "progress" {
             properties += ["progressView.progress"]
         }
-        if node.uiKit?.datePicker != nil || node.role == "datePicker" {
+        if node.platform?.datePicker != nil || node.role == "datePicker" {
             properties += ["datePicker.date", "datePicker.countDownDuration"]
         }
-        if node.uiKit?.activityIndicator != nil || node.role == "activityIndicator" {
+        if node.platform?.activityIndicator != nil || node.role == "activityIndicator" {
             properties += ["activityIndicator.animating"]
         }
-        if node.uiKit?.pickerView != nil || node.role == "pickerView" {
+        if node.platform?.pickerView != nil || node.role == "pickerView" {
             properties += ["pickerView.selectedRow"]
         }
-        if node.uiKit?.scrollView != nil || node.role == "scrollView" {
+        if node.platform?.scrollView != nil || node.role == "scrollView" {
             properties += [
                 "contentOffset", "contentSize", "contentInset", "scrollIndicatorInsets",
                 "scrollEnabled", "pagingEnabled", "bounces", "showsVerticalScrollIndicator",
                 "showsHorizontalScrollIndicator",
             ]
         }
-        if node.uiKit?.stackView != nil {
+        if node.platform?.stackView != nil {
             properties += [
                 "stack.axis", "stack.alignment", "stack.distribution", "stack.spacing",
                 "stack.layoutMarginsRelativeArrangement",
@@ -102,21 +102,21 @@ enum MutationPropertySupport {
 
     private static func canonicalProperty(_ property: String) -> String {
         switch property {
-        case "style.alpha", "uiKit.alpha":
+        case "style.alpha", "uikit.alpha":
             return "alpha"
-        case "isHidden", "uiKit.isHidden":
+        case "isHidden", "uikit.isHidden":
             return "hidden"
-        case "isOpaque", "uiKit.isOpaque":
+        case "isOpaque", "uikit.isOpaque":
             return "opaque"
-        case "masksToBounds", "uiKit.clipsToBounds":
+        case "masksToBounds", "uikit.clipsToBounds":
             return "clipsToBounds"
-        case "isUserInteractionEnabled", "uiKit.userInteractionEnabled":
+        case "isUserInteractionEnabled", "uikit.userInteractionEnabled":
             return "userInteractionEnabled"
         case "style.backgroundColor":
             return "backgroundColor"
-        case "uiKit.contentMode":
+        case "uikit.contentMode":
             return "contentMode"
-        case "uiKit.tag":
+        case "uikit.tag":
             return "tag"
         case "layer.borderColor", "style.borderColor":
             return "borderColor"
@@ -142,7 +142,7 @@ enum MutationPropertySupport {
             return "accessibility.hint"
         case "accessibilityIdentifier", "testID":
             return "accessibility.identifier"
-        case "label.text", "textField.text", "textView.text", "uiKit.text":
+        case "label.text", "textField.text", "textView.text", "uikit.text":
             return "text"
         case "style.textColor":
             return "textColor"
@@ -176,48 +176,48 @@ enum MutationPropertySupport {
     }
 
     private static func supportsTextColorMutation(_ node: LoupeNode) -> Bool {
-        node.uiKit?.label != nil
-            || node.uiKit?.textField != nil
-            || node.uiKit?.textView != nil
-            || (node.uiKit?.button != nil && isLikelyUIKitClass(node))
+        node.platform?.label != nil
+            || node.platform?.textField != nil
+            || node.platform?.textView != nil
+            || (node.platform?.button != nil && isLikelyUIKitClass(node))
     }
 
     private static func supportsFontSizeMutation(_ node: LoupeNode) -> Bool {
-        node.uiKit?.label != nil
-            || node.uiKit?.button != nil
-            || node.uiKit?.textField != nil
-            || node.uiKit?.textView != nil
+        node.platform?.label != nil
+            || node.platform?.button != nil
+            || node.platform?.textField != nil
+            || node.platform?.textView != nil
     }
 
     private static func supportsTextAlignmentMutation(_ node: LoupeNode) -> Bool {
         isLikelyUIKitClass(node)
-            && (node.uiKit?.label != nil || node.uiKit?.textField != nil || node.uiKit?.textView != nil)
+            && (node.platform?.label != nil || node.platform?.textField != nil || node.platform?.textView != nil)
     }
 
     private static func supportsLineBreakModeMutation(_ node: LoupeNode) -> Bool {
         isLikelyUIKitClass(node)
-            && (node.uiKit?.label != nil || node.uiKit?.button != nil)
+            && (node.platform?.label != nil || node.platform?.button != nil)
     }
 
     private static func supportsUILabelSpecificMutations(_ node: LoupeNode) -> Bool {
-        isLikelyUIKitClass(node) && node.uiKit?.label != nil
+        isLikelyUIKitClass(node) && node.platform?.label != nil
     }
 
     private static func supportsUITextFieldSpecificMutations(_ node: LoupeNode) -> Bool {
-        isLikelyUIKitClass(node) && node.uiKit?.textField != nil
+        isLikelyUIKitClass(node) && node.platform?.textField != nil
     }
 
     private static func isLikelyUIKitClass(_ node: LoupeNode) -> Bool {
-        let className = node.uiKit?.className ?? node.typeName
+        let className = node.platform?.className ?? node.typeName
         return className.hasPrefix("UI")
             || className.hasPrefix("_UI")
             || className.contains(".UI")
     }
 
     private static func isTextBacked(_ node: LoupeNode) -> Bool {
-        node.uiKit?.label != nil
-            || node.uiKit?.button != nil
-            || node.uiKit?.textField != nil
-            || node.uiKit?.textView != nil
+        node.platform?.label != nil
+            || node.platform?.button != nil
+            || node.platform?.textField != nil
+            || node.platform?.textView != nil
     }
 }

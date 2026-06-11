@@ -11,7 +11,7 @@ $LOUPE act tap --host <host> --x 201 --y 274 --width 438 --height 954 --udid <si
 $LOUPE act swipe --host <host> --from 219,760 --to 219,190 --udid <sim-udid> --trace-dir <trace-dir>
 $LOUPE act drag --host <host> --from 350,240 --to 80,240 --udid <sim-udid> --trace-dir <trace-dir>
 $LOUPE act type "hello" --host <host> --udid <sim-udid> --trace-dir <trace-dir>
-$LOUPE act wait value --host <host> --test-id feed.list --key uiKit.scrollView.contentOffset.y --equals 80 --output <wait.json>
+$LOUPE act wait value --host <host> --test-id feed.list --key uikit.scrollView.contentOffset.y --equals 80 --output <wait.json>
 $LOUPE debug trace summary <trace-dir>
 ```
 
@@ -30,7 +30,7 @@ Use one fresh trace directory per attempt.
   so prove the final value with a fresh report/query/node and never raw
   secrets.
 - Secure inputs may still query as `textField`; prove security with
-  `uiKit.textField.isSecureTextEntry` and redacted text/value evidence.
+  `uikit.textField.isSecureTextEntry` and redacted text/value evidence.
 - `act wait`, `act drag`, and `debug scroll` need explicit postconditions:
   selector, key or coordinates, output/trace path, expected state, and fresh
   after-proof.

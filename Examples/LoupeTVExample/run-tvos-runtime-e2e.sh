@@ -143,9 +143,13 @@ FLAG_DISABLED_PATH="/tmp/loupe-tvos-flag-disabled.json"
 EMPTY_FLAG_PATH="/tmp/loupe-tvos-empty-flag.json"
 ERROR_FLAG_PATH="/tmp/loupe-tvos-error-flag.json"
 ERROR_FLAG_SET_PATH="/tmp/loupe-tvos-error-flag-set.json"
+SWIFTUI_FLAG_PATH="/tmp/loupe-tvos-swiftui-flag.json"
+SWIFTUI_FLAG_SET_PATH="/tmp/loupe-tvos-swiftui-flag-set.json"
+SWIFTUI_FLAG_CLEAR_PATH="/tmp/loupe-tvos-swiftui-flag-clear.json"
 ERROR_SNAPSHOT_PATH="/tmp/loupe-tvos-error-snapshot.json"
 ERROR_INSPECT_PATH="/tmp/loupe-tvos-error-inspect.json"
 ERROR_LOGS_PATH="/tmp/loupe-tvos-error-logs.json"
+SWIFTUI_SNAPSHOT_PATH="/tmp/loupe-tvos-swiftui-snapshot.json"
 KEYCHAIN_PATH="/tmp/loupe-tvos-keychain.json"
 KEYCHAIN_AFTER_LOGOUT_PATH="/tmp/loupe-tvos-keychain-after-logout.json"
 HIT_TEST_PATH="/tmp/loupe-tvos-hit-test.json"
@@ -170,10 +174,12 @@ PRESS_DETAIL_TRACE_DIR="/tmp/loupe-tvos-press-detail-route-trace"
 PRESS_DETAIL_BACK_TRACE_DIR="/tmp/loupe-tvos-press-detail-back-trace"
 PRESS_LONG_LIST_TRACE_DIR="/tmp/loupe-tvos-press-long-list-route-trace"
 PRESS_LONG_LIST_BACK_TRACE_DIR="/tmp/loupe-tvos-press-long-list-back-trace"
+PRESS_SWIFTUI_TRACE_DIR="/tmp/loupe-tvos-press-swiftui-route-trace"
+PRESS_SWIFTUI_BACK_TRACE_DIR="/tmp/loupe-tvos-press-swiftui-back-trace"
 PRESS_ERROR_TRACE_DIR="/tmp/loupe-tvos-press-error-route-trace"
 PRESS_ERROR_BACK_TRACE_DIR="/tmp/loupe-tvos-press-error-back-trace"
-rm -f "$SNAPSHOT_PATH" "$DARK_SNAPSHOT_PATH" "$FOCUS_SNAPSHOT_PATH" "$ACCESSIBILITY_PATH" "$VIEW_TREE_PATH" "$ACCESSIBILITY_TREE_PATH" "$RUNTIME_PATH" "$LOGS_PATH" "$PRESS_LOGS_PATH" "$NEW_NAV_LOGS_PATH" "$LEGACY_LOGS_PATH" "$LOGOUT_LOGS_PATH" "$ROUTE_LOGS_PATH" "$NETWORK_PATH" "$REFS_PATH" "$OBJECT_GRAPH_PATH" "$OBJECT_CLASSES_PATH" "$OBJECT_DESCRIPTION_PATH" "$LEAKS_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$FLAG_DISABLED_PATH" "$EMPTY_FLAG_PATH" "$ERROR_FLAG_PATH" "$ERROR_FLAG_SET_PATH" "$ERROR_SNAPSHOT_PATH" "$ERROR_INSPECT_PATH" "$ERROR_LOGS_PATH" "$KEYCHAIN_PATH" "$KEYCHAIN_AFTER_LOGOUT_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$ENV_PATH" "$AUDIT_PATH" "$PERF_PATH" "$DETAIL_SCROLL_PATH" "$LONG_LIST_SCROLL_PATH" "$INSPECT_ROOT_PATH" "$INSPECT_LIST_PATH" "$INSPECT_EMPTY_PATH" "$QUERY_PATH" "$DETAIL_SNAPSHOT_PATH" "$LONG_LIST_SNAPSHOT_PATH"
-rm -rf "$PRESS_SELECT_TRACE_DIR" "$PRESS_DOWN_TRACE_DIR" "$PRESS_NEW_NAV_TRACE_DIR" "$PRESS_LEGACY_TRACE_DIR" "$PRESS_LOGOUT_TRACE_DIR" "$PRESS_DETAIL_TRACE_DIR" "$PRESS_DETAIL_BACK_TRACE_DIR" "$PRESS_LONG_LIST_TRACE_DIR" "$PRESS_LONG_LIST_BACK_TRACE_DIR" "$PRESS_ERROR_TRACE_DIR" "$PRESS_ERROR_BACK_TRACE_DIR"
+rm -f "$SNAPSHOT_PATH" "$DARK_SNAPSHOT_PATH" "$FOCUS_SNAPSHOT_PATH" "$ACCESSIBILITY_PATH" "$VIEW_TREE_PATH" "$ACCESSIBILITY_TREE_PATH" "$RUNTIME_PATH" "$LOGS_PATH" "$PRESS_LOGS_PATH" "$NEW_NAV_LOGS_PATH" "$LEGACY_LOGS_PATH" "$LOGOUT_LOGS_PATH" "$ROUTE_LOGS_PATH" "$NETWORK_PATH" "$REFS_PATH" "$OBJECT_GRAPH_PATH" "$OBJECT_CLASSES_PATH" "$OBJECT_DESCRIPTION_PATH" "$LEAKS_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$FLAG_DISABLED_PATH" "$EMPTY_FLAG_PATH" "$ERROR_FLAG_PATH" "$ERROR_FLAG_SET_PATH" "$SWIFTUI_FLAG_PATH" "$SWIFTUI_FLAG_SET_PATH" "$SWIFTUI_FLAG_CLEAR_PATH" "$ERROR_SNAPSHOT_PATH" "$ERROR_INSPECT_PATH" "$ERROR_LOGS_PATH" "$SWIFTUI_SNAPSHOT_PATH" "$KEYCHAIN_PATH" "$KEYCHAIN_AFTER_LOGOUT_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$ENV_PATH" "$AUDIT_PATH" "$PERF_PATH" "$DETAIL_SCROLL_PATH" "$LONG_LIST_SCROLL_PATH" "$INSPECT_ROOT_PATH" "$INSPECT_LIST_PATH" "$INSPECT_EMPTY_PATH" "$QUERY_PATH" "$DETAIL_SNAPSHOT_PATH" "$LONG_LIST_SNAPSHOT_PATH"
+rm -rf "$PRESS_SELECT_TRACE_DIR" "$PRESS_DOWN_TRACE_DIR" "$PRESS_NEW_NAV_TRACE_DIR" "$PRESS_LEGACY_TRACE_DIR" "$PRESS_LOGOUT_TRACE_DIR" "$PRESS_DETAIL_TRACE_DIR" "$PRESS_DETAIL_BACK_TRACE_DIR" "$PRESS_LONG_LIST_TRACE_DIR" "$PRESS_LONG_LIST_BACK_TRACE_DIR" "$PRESS_SWIFTUI_TRACE_DIR" "$PRESS_SWIFTUI_BACK_TRACE_DIR" "$PRESS_ERROR_TRACE_DIR" "$PRESS_ERROR_BACK_TRACE_DIR"
 
 curl -fsS "$HOST/health" | grep -q LoupeKit
 .build/debug/loupe app info --host "$HOST" --udid "$DEVICE" > "$RUNTIME_PATH"
@@ -279,6 +285,35 @@ BUTTON_POINT="$(ruby -rjson -e '
 .build/debug/loupe ui snapshot --host "$HOST" --timeout 10 --output "$LONG_LIST_SNAPSHOT_PATH" >/dev/null
 .build/debug/loupe debug scroll --host "$HOST" --udid "$DEVICE" --test-id tv.example.longList.scroll --delta 0,160 --output "$LONG_LIST_SCROLL_PATH" >/dev/null
 .build/debug/loupe act press select --host "$HOST" --udid "$DEVICE" --trace-dir "$PRESS_LONG_LIST_BACK_TRACE_DIR" --expect-visible tv.example.root
+.build/debug/loupe debug flags get tv-swiftui-route --host "$HOST" --output "$SWIFTUI_FLAG_PATH" >/dev/null
+.build/debug/loupe debug flags set tv-swiftui-route --bool true --host "$HOST" --output "$SWIFTUI_FLAG_SET_PATH" >/dev/null
+.build/debug/loupe act wait visible --host "$HOST" --test-id tv.example.refresh --timeout 5 >/tmp/loupe-tvos-wait-workbench-after-long-list.json
+.build/debug/loupe act press down --host "$HOST" --udid "$DEVICE" --expect-visible tv.example.secondary
+.build/debug/loupe act press down --host "$HOST" --udid "$DEVICE" --expect-visible tv.example.logout
+.build/debug/loupe act press down --host "$HOST" --udid "$DEVICE" --expect-visible tv.example.legacyFlow
+.build/debug/loupe act press select --host "$HOST" --udid "$DEVICE" --trace-dir "$PRESS_SWIFTUI_TRACE_DIR" --expect-visible tv.example.swiftuiRoute
+.build/debug/loupe act wait visible --host "$HOST" --test-id tv.example.swiftuiRoute.probe --timeout 5 >/tmp/loupe-tvos-wait-swiftui-route.json
+.build/debug/loupe ui snapshot --host "$HOST" --timeout 10 --output "$SWIFTUI_SNAPSHOT_PATH" >/dev/null
+ruby -rjson -e '
+  snapshot = JSON.parse(File.read(ARGV.fetch(0)))
+  by_test_id = snapshot.fetch("nodes").values.each_with_object({}) { |node, map| map[node["testID"]] = node if node["testID"] }
+  root = by_test_id.fetch("tv.example.swiftuiRoute")
+  host = by_test_id.fetch("tv.example.swiftuiRoute.host")
+  probe = by_test_id.fetch("tv.example.swiftuiRoute.probe")
+  by_test_id.fetch("tv.example.swiftuiRoute.metrics")
+  by_test_id.fetch("tv.example.swiftuiRoute.rows")
+  abort "expected tvOS SwiftUI route root" unless root["testID"] == "tv.example.swiftuiRoute"
+  abort "expected tvOS SwiftUI route host metadata" unless host.dig("swiftui", "origin") == "host"
+  abort "expected tvOS SwiftUI route probe metadata" unless probe.dig("swiftui", "origin") == "probe"
+  abort "expected tvOS SwiftUI root type summary" unless host.dig("swiftui", "rootTypeName") == "TVSwiftUIScreenView"
+  properties = host.dig("swiftui", "properties") || []
+  abort "expected tvOS SwiftUI private property summary" unless properties.any? { |property|
+    property["name"] == "progress" && (property.dig("value", "value").to_f - 0.58).abs < 0.001
+  }
+  abort "expected tvOS SwiftUI route probe label" unless probe["label"] == "tvOS SwiftUI route probe"
+' "$SWIFTUI_SNAPSHOT_PATH"
+.build/debug/loupe act tap --backend runtime --host "$HOST" --udid "$DEVICE" --test-id tv.example.swiftuiRoute.back --trace-dir "$PRESS_SWIFTUI_BACK_TRACE_DIR" --expect-visible tv.example.root
+.build/debug/loupe debug flags set tv-swiftui-route --bool false --host "$HOST" --output "$SWIFTUI_FLAG_CLEAR_PATH" >/dev/null
 .build/debug/loupe debug logs --host "$HOST" --output "$ROUTE_LOGS_PATH" >/dev/null
 .build/debug/loupe debug flags get tv-error-route --host "$HOST" --output "$ERROR_FLAG_PATH" >/dev/null
 .build/debug/loupe debug flags set tv-error-route --bool true --host "$HOST" --output "$ERROR_FLAG_SET_PATH" >/dev/null
@@ -326,19 +361,19 @@ ruby -rjson -e '
   abort "missing tvOS SwiftUI host view" unless swiftui_host
   swiftui_probe = snapshot.fetch("nodes").values.find { |node| node["testID"] == "tv.example.swiftui.probe" }
   abort "missing tvOS SwiftUI probe view" unless swiftui_probe
-  abort "expected tvOS SwiftUI probe UIViewRepresentable class evidence" unless swiftui_probe.dig("uiKit", "className") == "UIView"
+  abort "expected tvOS SwiftUI probe UIViewRepresentable class evidence" unless swiftui_probe.dig("uikit", "className") == "UIView"
   swiftui_probe_frame = swiftui_probe.fetch("frame")
   abort "expected tvOS SwiftUI probe bounds width" unless swiftui_probe_frame.fetch("width").to_f > 100
   abort "expected tvOS SwiftUI probe bounds height" unless swiftui_probe_frame.fetch("height").to_f > 40
 
   list = JSON.parse(File.read(ARGV.fetch(4))).fetch("node")
-  abort "expected UIScrollView list" unless list.dig("uiKit", "className") == "UIScrollView"
+  abort "expected UIScrollView list" unless list.dig("uikit", "className") == "UIScrollView"
   abort "expected tvOS list role" unless list["role"] == "scrollView"
-  abort "expected tvOS list scroll properties" unless list.dig("uiKit", "scrollView", "isScrollEnabled") == true
-  abort "expected tvOS list content taller than frame" unless list.dig("uiKit", "scrollView", "contentSize", "height").to_f > list.fetch("frame").fetch("height").to_f
+  abort "expected tvOS list scroll properties" unless list.dig("uikit", "scrollView", "isScrollEnabled") == true
+  abort "expected tvOS list content taller than frame" unless list.dig("uikit", "scrollView", "contentSize", "height").to_f > list.fetch("frame").fetch("height").to_f
 
   empty = JSON.parse(File.read(ARGV.fetch(21))).fetch("node")
-  abort "expected empty feed scroll view" unless empty.dig("uiKit", "className") == "UIScrollView"
+  abort "expected empty feed scroll view" unless empty.dig("uikit", "className") == "UIScrollView"
   abort "expected empty feed role" unless empty["role"] == "scrollView"
   empty_children = snapshot.fetch("nodes").values.select { |node| node["testID"]&.start_with?("tv.example.emptyFeed.row") }
   abort "expected no rendered empty feed rows" unless empty_children.empty?
@@ -357,10 +392,10 @@ ruby -rjson -e '
   abort "expected tv.example.refresh button role" unless refresh["role"] == "button"
   abort "expected tv.example.refresh text" unless refresh["text"] == "Refresh snapshot"
   abort "expected tv.example.refresh interactive" unless refresh["isInteractive"] == true
-  abort "expected tv.example.refresh focus state" unless refresh.dig("uiKit", "isFocused") == true
-  abort "expected tv.example.refresh focus eligibility" unless refresh.dig("uiKit", "canBecomeFocused") == true
-  abort "expected tv.example.refresh focused control state" unless refresh.dig("uiKit", "control", "controlState")&.include?("focused")
-  abort "expected tv.example.refresh primary action" unless refresh.dig("uiKit", "control", "controlEvents")&.include?("primaryActionTriggered")
+  abort "expected tv.example.refresh focus state" unless refresh.dig("uikit", "isFocused") == true
+  abort "expected tv.example.refresh focus eligibility" unless refresh.dig("uikit", "canBecomeFocused") == true
+  abort "expected tv.example.refresh focused control state" unless refresh.dig("uikit", "control", "controlState")&.include?("focused")
+  abort "expected tv.example.refresh primary action" unless refresh.dig("uikit", "control", "controlEvents")&.include?("primaryActionTriggered")
   abort "expected tv.example.refresh accessibility label" unless refresh.dig("accessibility", "label") == "Refresh snapshot"
   abort "expected tv.example.refresh accessibility element" unless refresh.dig("accessibility", "isElement") == true
 
@@ -369,10 +404,10 @@ ruby -rjson -e '
 
   secondary = snapshot.fetch("nodes").values.find { |node| node["testID"] == "tv.example.secondary" }
   abort "missing tv.example.secondary focusable node" unless secondary
-  abort "expected tv.example.secondary focus eligibility" unless secondary.dig("uiKit", "canBecomeFocused") == true
-  abort "expected tv.example.secondary not focused at launch" unless secondary.dig("uiKit", "isFocused") == false
+  abort "expected tv.example.secondary focus eligibility" unless secondary.dig("uikit", "canBecomeFocused") == true
+  abort "expected tv.example.secondary not focused at launch" unless secondary.dig("uikit", "isFocused") == false
 
-  focused_nodes = snapshot.fetch("nodes").values.select { |node| node.dig("uiKit", "isFocused") == true }
+  focused_nodes = snapshot.fetch("nodes").values.select { |node| node.dig("uikit", "isFocused") == true }
   abort "expected exactly one focused tvOS node, got #{focused_nodes.map { |node| node["testID"] || node["typeName"] }.inspect}" unless focused_nodes.count == 1
 
   logs = JSON.parse(File.read(ARGV.fetch(5)))
@@ -449,7 +484,7 @@ ruby -rjson -e '
   logout_status = logout_after.fetch("nodes").values.find { |node| node["testID"] == "tv.example.status" }
   abort "expected logout trace after snapshot" unless logout_status && logout_status["text"] == "Logged out"
 
-  focused_after_down = focus_snapshot.fetch("nodes").values.select { |node| node.dig("uiKit", "isFocused") == true }
+  focused_after_down = focus_snapshot.fetch("nodes").values.select { |node| node.dig("uikit", "isFocused") == true }
   abort "expected tv.example.secondary focused after press down, got #{focused_after_down.map { |node| node["testID"] || node["typeName"] }.inspect}" unless focused_after_down.any? { |node| node["testID"] == "tv.example.secondary" }
 
   network = JSON.parse(File.read(ARGV.fetch(6)))
@@ -533,7 +568,7 @@ ruby -rjson -e '
   abort "expected tvOS detail route root" unless detail_ids.include?("tv.example.detail")
   abort "expected tvOS detail route scroll" unless detail_ids.include?("tv.example.detail.scroll")
   detail_scroll = detail_snapshot.fetch("nodes").values.find { |node| node["testID"] == "tv.example.detail.scroll" }
-  abort "expected tvOS detail scroll content" unless detail_scroll && detail_scroll.dig("uiKit", "scrollView", "contentSize", "height").to_f > detail_scroll.fetch("frame").fetch("height").to_f
+  abort "expected tvOS detail scroll content" unless detail_scroll && detail_scroll.dig("uikit", "scrollView", "contentSize", "height").to_f > detail_scroll.fetch("frame").fetch("height").to_f
   detail_perf = JSON.parse(File.read(ARGV.fetch(36)))
   abort "expected tvOS detail scroll target" unless detail_perf["testID"] == "tv.example.detail.scroll"
   abort "expected tvOS detail positive scroll delta" unless detail_perf.dig("delta", "y").to_f > 0
@@ -560,6 +595,7 @@ ruby -rjson -e '
   route_logs = JSON.parse(File.read(ARGV.fetch(43)))
   abort "missing tvOS detail route log" unless route_logs.any? { |entry| entry["message"] == "tv_example_detail_route" }
   abort "missing tvOS long-list route log" unless route_logs.any? { |entry| entry["message"] == "tv_example_long_list_route" }
+  abort "missing tvOS SwiftUI route log" unless route_logs.any? { |entry| entry["message"] == "tv_example_swiftui_route" }
   abort "missing tvOS workbench route log" unless route_logs.any? { |entry| entry["message"] == "tv_example_workbench_route" }
 
   error_flag = JSON.parse(File.read(ARGV.fetch(44)))

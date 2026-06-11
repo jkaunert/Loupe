@@ -101,6 +101,7 @@ private struct WatchSessionDashboard: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 header
+                swiftUIScreenPanel
                 metrics
                 intervalCard
                 hydrationCard
@@ -157,6 +158,21 @@ private struct WatchSessionDashboard: View {
         }
         .localLoupeProbe("watch.example.metrics", label: "Session metrics")
     }
+
+    private var swiftUIScreenPanel: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("SwiftUI screen")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("Watch route rendered by SwiftUI")
+                .font(.subheadline.weight(.semibold))
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.green.opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
+        .localLoupeProbe("watch.example.swiftui.screen", label: "watchOS SwiftUI screen")
+    }
+
 
     private var intervalCard: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -337,7 +353,10 @@ private func loupeLifetimeProbe(
 private func loupeProbe(_ id: String, label: String?, frame: CGRect? = nil) {
     var userInfo: [String: Any] = [
         "id": id,
-        "metadata": ["source": "local-fallback"],
+        "metadata": [
+            "source": "local-fallback",
+            "loupe.swiftUI": true,
+        ],
     ]
     if let label {
         userInfo["label"] = label

@@ -286,7 +286,7 @@ struct SnapshotQueryTests {
                 isEnabled: true,
                 isInteractive: true,
                 runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-                uiKit: LoupeUIKitProperties(
+                uikit: LoupeUIKitProperties(
                     className: "ConflictingUserClassName",
                     tag: 0,
                     alpha: 1,

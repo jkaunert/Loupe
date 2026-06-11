@@ -310,7 +310,7 @@ private func backgroundPaintCoverageWarning(targetRef: String, snapshot: LoupeSn
     }) else {
         return nil
     }
-    let typeName = coveringChild.uiKit?.className ?? coveringChild.typeName
+    let typeName = coveringChild.platform?.className ?? coveringChild.typeName
     return "backgroundColor changed, but same-frame child \(coveringChild.ref) (\(typeName)) may cover it. Try mutating \(coveringChild.ref) backgroundColor instead."
 }
 
@@ -460,7 +460,7 @@ private func completeSelfSizingProbe(
     if let containerView = probe.containerView,
        let containerRef = afterCapture.viewRefs[ObjectIdentifier(containerView)],
        let afterNode = afterCapture.snapshot.nodes[containerRef] {
-        probe.result.afterContainerContentSize = afterNode.uiKit?.scrollView?.contentSize
+        probe.result.afterContainerContentSize = afterNode.platform?.scrollView?.contentSize
     }
     if let cellView = probe.cellView,
        let cellRef = afterCapture.viewRefs[ObjectIdentifier(cellView)],
@@ -696,7 +696,7 @@ private func formatCGFloat(_ value: CGFloat) -> String {
 private func mutationNodeSummary(_ node: LoupeNode) -> LoupeMutationNodeSummary {
     LoupeMutationNodeSummary(
         ref: node.ref,
-        typeName: node.uiKit?.className ?? node.typeName,
+        typeName: node.platform?.className ?? node.typeName,
         role: node.role,
         testID: node.testID,
         text: LoupeObservationCompactor.displayText(for: node),
@@ -875,51 +875,51 @@ private func mutationPropertyValue(_ property: String, in node: LoupeNode) -> Lo
     case "accessibility.identifier", "accessibilityidentifier", "testid":
         return node.accessibility?.identifier.map(LoupeMutationValue.string) ?? node.testID.map(LoupeMutationValue.string)
     case "layout.translatesautoresizingmaskintoconstraints", "translatesautoresizingmaskintoconstraints":
-        return node.uiKit?.layout.map { .bool($0.translatesAutoresizingMaskIntoConstraints) }
+        return node.platform?.layout.map { .bool($0.translatesAutoresizingMaskIntoConstraints) }
     case "layout.isambiguouslayout", "isambiguouslayout":
-        return node.uiKit?.layout.map { .bool($0.isAmbiguousLayout) }
+        return node.platform?.layout.map { .bool($0.isAmbiguousLayout) }
     case "layout.hugging.horizontal":
-        return node.uiKit?.layout.map { .double($0.hugging.horizontal) }
+        return node.platform?.layout.map { .double($0.hugging.horizontal) }
     case "layout.hugging.vertical":
-        return node.uiKit?.layout.map { .double($0.hugging.vertical) }
+        return node.platform?.layout.map { .double($0.hugging.vertical) }
     case "layout.compressionresistance.horizontal":
-        return node.uiKit?.layout.map { .double($0.compressionResistance.horizontal) }
+        return node.platform?.layout.map { .double($0.compressionResistance.horizontal) }
     case "layout.compressionresistance.vertical":
-        return node.uiKit?.layout.map { .double($0.compressionResistance.vertical) }
+        return node.platform?.layout.map { .double($0.compressionResistance.vertical) }
     case "stack.axis", "stackview.axis":
-        return node.uiKit?.stackView.map { .string($0.axis) }
+        return node.platform?.stackView.map { .string($0.axis) }
     case "stack.alignment", "stackview.alignment":
-        return node.uiKit?.stackView.map { .string($0.alignment) }
+        return node.platform?.stackView.map { .string($0.alignment) }
     case "stack.distribution", "stackview.distribution":
-        return node.uiKit?.stackView.map { .string($0.distribution) }
+        return node.platform?.stackView.map { .string($0.distribution) }
     case "stack.spacing", "stackview.spacing":
-        return node.uiKit?.stackView.map { .double($0.spacing) }
+        return node.platform?.stackView.map { .double($0.spacing) }
     case "stack.layoutmarginsrelativearrangement", "stackview.layoutmarginsrelativearrangement":
-        return node.uiKit?.stackView.map { .bool($0.isLayoutMarginsRelativeArrangement) }
+        return node.platform?.stackView.map { .bool($0.isLayoutMarginsRelativeArrangement) }
     case "contentoffset", "scrollview.contentoffset":
-        return node.uiKit?.scrollView.map { .point($0.contentOffset) }
+        return node.platform?.scrollView.map { .point($0.contentOffset) }
     case "contentsize", "scrollview.contentsize":
-        return node.uiKit?.scrollView.map { .size($0.contentSize) }
+        return node.platform?.scrollView.map { .size($0.contentSize) }
     case "contentinset", "scrollview.contentinset":
-        return node.uiKit?.scrollView.map { .rect(mutationRect(from: $0.contentInset)) }
+        return node.platform?.scrollView.map { .rect(mutationRect(from: $0.contentInset)) }
     case "scrollindicatorinsets", "scrollview.scrollindicatorinsets":
-        return node.uiKit?.scrollView.map { .rect(mutationRect(from: $0.scrollIndicatorInsets)) }
+        return node.platform?.scrollView.map { .rect(mutationRect(from: $0.scrollIndicatorInsets)) }
     case "scrollenabled", "isscrollenabled", "scrollview.isscrollenabled":
-        return node.uiKit?.scrollView.map { .bool($0.isScrollEnabled) }
+        return node.platform?.scrollView.map { .bool($0.isScrollEnabled) }
     #if !os(tvOS)
     case "pagingenabled", "ispagingenabled", "scrollview.ispagingenabled":
-        return node.uiKit?.scrollView.map { .bool($0.isPagingEnabled) }
+        return node.platform?.scrollView.map { .bool($0.isPagingEnabled) }
     #endif
     case "bounces", "scrollview.bounces":
-        return node.uiKit?.scrollView.map { .bool($0.bounces) }
+        return node.platform?.scrollView.map { .bool($0.bounces) }
     case "showshorizontalscrollindicator":
-        return node.uiKit?.scrollView.map { .bool($0.showsHorizontalScrollIndicator) }
+        return node.platform?.scrollView.map { .bool($0.showsHorizontalScrollIndicator) }
     case "showsverticalscrollindicator":
-        return node.uiKit?.scrollView.map { .bool($0.showsVerticalScrollIndicator) }
+        return node.platform?.scrollView.map { .bool($0.showsVerticalScrollIndicator) }
     case "collectionview.selfsizinginvalidation":
-        return node.uiKit?.collectionView?.selfSizingInvalidation.map(LoupeMutationValue.string)
+        return node.platform?.collectionView?.selfSizingInvalidation.map(LoupeMutationValue.string)
     case "tableview.selfsizinginvalidation":
-        return node.uiKit?.tableView?.selfSizingInvalidation.map(LoupeMutationValue.string)
+        return node.platform?.tableView?.selfSizingInvalidation.map(LoupeMutationValue.string)
     default:
         return nil
     }
@@ -1003,21 +1003,21 @@ private var viewMutationDescriptors: [LoupeMutationDescriptor] {
         mutation(["center"]) { view, value in
             view.center = pointInSuperview(try pointValue(value), for: view)
         },
-        mutation(["alpha", "style.alpha", "uiKit.alpha"]) { view, value in
+        mutation(["alpha", "style.alpha", "uikit.alpha"]) { view, value in
             view.alpha = CGFloat(try doubleValue(value))
         },
-        mutation(["hidden", "isHidden", "uiKit.isHidden"]) { view, value in
+        mutation(["hidden", "isHidden", "uikit.isHidden"]) { view, value in
             view.isHidden = try boolValue(value)
         },
-        mutation(["opaque", "isOpaque", "uiKit.isOpaque"]) { view, value in
+        mutation(["opaque", "isOpaque", "uikit.isOpaque"]) { view, value in
             view.isOpaque = try boolValue(value)
         },
-        mutation(["clipsToBounds", "masksToBounds", "uiKit.clipsToBounds"]) { view, value in
+        mutation(["clipsToBounds", "masksToBounds", "uikit.clipsToBounds"]) { view, value in
             let bool = try boolValue(value)
             view.clipsToBounds = bool
             view.layer.masksToBounds = bool
         },
-        mutation(["userInteractionEnabled", "isUserInteractionEnabled", "uiKit.userInteractionEnabled"]) { view, value in
+        mutation(["userInteractionEnabled", "isUserInteractionEnabled", "uikit.userInteractionEnabled"]) { view, value in
             view.isUserInteractionEnabled = try boolValue(value)
         },
         mutation(["backgroundColor", "style.backgroundColor"]) { view, value in
@@ -1026,10 +1026,10 @@ private var viewMutationDescriptors: [LoupeMutationDescriptor] {
         mutation(["tintColor"]) { view, value in
             view.tintColor = try uiColor(value)
         },
-        mutation(["contentMode", "uiKit.contentMode"]) { view, value in
+        mutation(["contentMode", "uikit.contentMode"]) { view, value in
             view.contentMode = try contentMode(try stringValue(value))
         },
-        mutation(["tag", "uiKit.tag"]) { view, value in
+        mutation(["tag", "uikit.tag"]) { view, value in
             view.tag = try intValue(value)
         },
         mutation(["layout.translatesAutoresizingMaskIntoConstraints", "translatesAutoresizingMaskIntoConstraints"]) { view, value in
@@ -1108,7 +1108,7 @@ private var accessibilityMutationDescriptors: [LoupeMutationDescriptor] {
 @MainActor
 private var textMutationDescriptors: [LoupeMutationDescriptor] {
     [
-        mutation(["text", "label.text", "textField.text", "textView.text", "uiKit.text"]) { view, value in
+        mutation(["text", "label.text", "textField.text", "textView.text", "uikit.text"]) { view, value in
             try setText(try stringValue(value), on: view)
         },
         mutation(["placeholder", "textField.placeholder", "searchBar.placeholder"]) { view, value in
@@ -1194,7 +1194,7 @@ private var commonControlMutationDescriptors: [LoupeMutationDescriptor] {
             }
             control.isHighlighted = try boolValue(value)
         },
-        mutation(["segmentedControl.selectedSegmentIndex", "uiKit.segmentedControl.selectedSegmentIndex"]) { view, value in
+        mutation(["segmentedControl.selectedSegmentIndex", "uikit.segmentedControl.selectedSegmentIndex"]) { view, value in
             guard let control = view as? UISegmentedControl else {
                 throw unsupportedProperty("segmentedControl.selectedSegmentIndex", view: view)
             }
@@ -1205,7 +1205,7 @@ private var commonControlMutationDescriptors: [LoupeMutationDescriptor] {
             control.selectedSegmentIndex = index
             control.sendActions(for: .valueChanged)
         },
-        mutation(["pageControl.currentPage", "uiKit.pageControl.currentPage"]) { view, value in
+        mutation(["pageControl.currentPage", "uikit.pageControl.currentPage"]) { view, value in
             guard let control = view as? UIPageControl else {
                 throw unsupportedProperty("pageControl.currentPage", view: view)
             }
@@ -1218,7 +1218,7 @@ private var commonControlMutationDescriptors: [LoupeMutationDescriptor] {
             }
             control.numberOfPages = try intValue(value)
         },
-        mutation(["progressView.progress", "progressView.value", "uiKit.progress.progress", "uiKit.progressView.value"]) { view, value in
+        mutation(["progressView.progress", "progressView.value", "uikit.progress.progress", "uikit.progressView.value"]) { view, value in
             guard let progressView = view as? UIProgressView else {
                 throw unsupportedProperty("progressView.progress", view: view)
             }
@@ -1241,14 +1241,14 @@ private var commonControlMutationDescriptors: [LoupeMutationDescriptor] {
 @MainActor
 private var unavailableOnTVControlMutationDescriptors: [LoupeMutationDescriptor] {
     [
-        mutation(["switch.isOn", "switchControl.isOn", "uiKit.switch.isOn", "uiKit.switchControl.isOn"]) { view, value in
+        mutation(["switch.isOn", "switchControl.isOn", "uikit.switch.isOn", "uikit.switchControl.isOn"]) { view, value in
             guard let control = view as? UISwitch else {
                 throw unsupportedProperty("switch.isOn", view: view)
             }
             control.setOn(try boolValue(value), animated: false)
             control.sendActions(for: .valueChanged)
         },
-        mutation(["slider.value", "uiKit.slider.value"]) { view, value in
+        mutation(["slider.value", "uikit.slider.value"]) { view, value in
             guard let control = view as? UISlider else {
                 throw unsupportedProperty("slider.value", view: view)
             }
@@ -1267,7 +1267,7 @@ private var unavailableOnTVControlMutationDescriptors: [LoupeMutationDescriptor]
             }
             control.maximumValue = Float(try doubleValue(value))
         },
-        mutation(["stepper.value", "uiKit.stepper.value"]) { view, value in
+        mutation(["stepper.value", "uikit.stepper.value"]) { view, value in
             guard let control = view as? UIStepper else {
                 throw unsupportedProperty("stepper.value", view: view)
             }
@@ -1469,7 +1469,6 @@ private var stackMutationDescriptors: [LoupeMutationDescriptor] {
 private func normalizedMutationProperty(_ property: String) -> String {
     property
         .trimmingCharacters(in: .whitespacesAndNewlines)
-        .replacingOccurrences(of: "uiKit.", with: "uikit.")
         .lowercased()
 }
 

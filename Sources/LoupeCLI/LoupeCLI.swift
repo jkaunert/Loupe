@@ -258,7 +258,7 @@ struct LoupeCLI {
     private static func captureReportScrollViews(_ snapshot: LoupeSnapshot) -> [CaptureReportScrollView] {
         snapshot.nodes.values
             .compactMap { node -> CaptureReportScrollView? in
-                guard let scrollView = node.uiKit?.scrollView else { return nil }
+                guard let scrollView = node.platform?.scrollView else { return nil }
                 return CaptureReportScrollView(node: node, scrollView: scrollView)
             }
             .sorted { lhs, rhs in
@@ -1550,8 +1550,8 @@ struct LoupeCLI {
     }
 
     private static func mutationSnapshotRefCandidateScore(reference: LoupeNode, candidate: LoupeNode) -> Double? {
-        let referenceClass = reference.uiKit?.className ?? reference.typeName
-        let candidateClass = candidate.uiKit?.className ?? candidate.typeName
+        let referenceClass = reference.platform?.className ?? reference.typeName
+        let candidateClass = candidate.platform?.className ?? candidate.typeName
         let referenceText = LoupeObservationCompactor.displayText(for: reference)
         let candidateText = LoupeObservationCompactor.displayText(for: candidate)
 
@@ -3722,13 +3722,13 @@ struct LoupeCLI {
     }
 
     private static func isPublicInteractiveUIKitElement(_ node: LoupeNode) -> Bool {
-        node.uiKit?.button != nil
-            || node.uiKit?.switchControl != nil
-            || node.uiKit?.slider != nil
-            || node.uiKit?.stepper != nil
-            || node.uiKit?.segmentedControl != nil
-            || node.uiKit?.textField != nil
-            || node.uiKit?.textView != nil
+        node.platform?.button != nil
+            || node.platform?.switchControl != nil
+            || node.platform?.slider != nil
+            || node.platform?.stepper != nil
+            || node.platform?.segmentedControl != nil
+            || node.platform?.textField != nil
+            || node.platform?.textView != nil
             || hasSyntheticSource("UIBarButtonItem", node)
             || hasSyntheticSource("UITabBarItem", node)
     }
@@ -3749,7 +3749,7 @@ struct LoupeCLI {
         if let identifier = node.accessibility?.identifier, !identifier.isEmpty {
             return "axID:\(identifier)"
         }
-        let type = node.uiKit?.className ?? node.typeName
+        let type = node.platform?.className ?? node.typeName
         let role = node.role ?? ""
         if let frame = node.frame {
             if suppressesDiffAggregateText(node, screen: screen) {
@@ -3765,7 +3765,7 @@ struct LoupeCLI {
         LoupeNodeDiffSummary(
             key: key,
             ref: node.ref,
-            typeName: node.uiKit?.className ?? node.typeName,
+            typeName: node.platform?.className ?? node.typeName,
             role: node.role,
             testID: node.testID,
             text: diffSummaryText(node, screen: screen),
@@ -3776,7 +3776,7 @@ struct LoupeCLI {
 
     private static func nodeSummary(_ node: LoupeNode, screen: LoupeSize) -> String {
         [
-            node.uiKit?.className ?? node.typeName,
+            node.platform?.className ?? node.typeName,
             node.testID.map { "#\($0)" },
             diffSummaryText(node, screen: screen).map { "\"\(summaryPreview($0))\"" },
             node.frame.map(rectSummary),
@@ -3791,8 +3791,8 @@ struct LoupeCLI {
         appendChange("isEnabled", before.isEnabled, after.isEnabled, to: &changes)
         appendChange("isInteractive", before.isInteractive, after.isInteractive, to: &changes)
         appendChange("frame", before.frame.map(rectSummary), after.frame.map(rectSummary), to: &changes)
-        appendChange("uiKit.isFocused", before.uiKit?.isFocused, after.uiKit?.isFocused, to: &changes)
-        appendChange("uiKit.canBecomeFocused", before.uiKit?.canBecomeFocused, after.uiKit?.canBecomeFocused, to: &changes)
+        appendChange("uikit.isFocused", before.platform?.isFocused, after.platform?.isFocused, to: &changes)
+        appendChange("uikit.canBecomeFocused", before.platform?.canBecomeFocused, after.platform?.canBecomeFocused, to: &changes)
         appendChange("style.alpha", before.style?.alpha, after.style?.alpha, to: &changes)
         appendChange("style.backgroundColor", before.style?.backgroundColor.map(colorSummary), after.style?.backgroundColor.map(colorSummary), to: &changes)
         appendChange("style.tintColor", before.style?.tintColor.map(colorSummary), after.style?.tintColor.map(colorSummary), to: &changes)
@@ -3806,22 +3806,22 @@ struct LoupeCLI {
         appendChange("style.shadowOpacity", before.style?.shadowOpacity, after.style?.shadowOpacity, to: &changes)
         appendChange("style.shadowRadius", before.style?.shadowRadius, after.style?.shadowRadius, to: &changes)
         appendChange("style.shadowOffset", before.style?.shadowOffset.map(sizeSummary), after.style?.shadowOffset.map(sizeSummary), to: &changes)
-        appendChange("uiKit.scrollView.contentOffset", before.uiKit?.scrollView.map { pointSummary($0.contentOffset) }, after.uiKit?.scrollView.map { pointSummary($0.contentOffset) }, to: &changes)
-        appendChange("uiKit.scrollView.contentSize", before.uiKit?.scrollView.map { sizeSummary($0.contentSize) }, after.uiKit?.scrollView.map { sizeSummary($0.contentSize) }, to: &changes)
-        appendChange("uiKit.scrollView.contentInset", before.uiKit?.scrollView.map { insetsSummary($0.contentInset) }, after.uiKit?.scrollView.map { insetsSummary($0.contentInset) }, to: &changes)
-        appendChange("uiKit.scrollView.adjustedContentInset", before.uiKit?.scrollView.map { insetsSummary($0.adjustedContentInset) }, after.uiKit?.scrollView.map { insetsSummary($0.adjustedContentInset) }, to: &changes)
-        appendChange("uiKit.scrollView.scrollIndicatorInsets", before.uiKit?.scrollView.map { insetsSummary($0.scrollIndicatorInsets) }, after.uiKit?.scrollView.map { insetsSummary($0.scrollIndicatorInsets) }, to: &changes)
-        appendChange("uiKit.scrollView.isScrollEnabled", before.uiKit?.scrollView?.isScrollEnabled, after.uiKit?.scrollView?.isScrollEnabled, to: &changes)
-        appendChange("uiKit.scrollView.isPagingEnabled", before.uiKit?.scrollView?.isPagingEnabled, after.uiKit?.scrollView?.isPagingEnabled, to: &changes)
-        appendChange("uiKit.scrollView.bounces", before.uiKit?.scrollView?.bounces, after.uiKit?.scrollView?.bounces, to: &changes)
-        appendChange("uiKit.scrollView.showsVerticalScrollIndicator", before.uiKit?.scrollView?.showsVerticalScrollIndicator, after.uiKit?.scrollView?.showsVerticalScrollIndicator, to: &changes)
-        appendChange("uiKit.scrollView.showsHorizontalScrollIndicator", before.uiKit?.scrollView?.showsHorizontalScrollIndicator, after.uiKit?.scrollView?.showsHorizontalScrollIndicator, to: &changes)
-        appendChange("uiKit.switch.isOn", before.uiKit?.switchControl?.isOn, after.uiKit?.switchControl?.isOn, to: &changes)
-        appendChange("uiKit.segmentedControl.selectedSegmentIndex", before.uiKit?.segmentedControl?.selectedSegmentIndex, after.uiKit?.segmentedControl?.selectedSegmentIndex, to: &changes)
-        appendChange("uiKit.slider.value", before.uiKit?.slider?.value, after.uiKit?.slider?.value, to: &changes)
-        appendChange("uiKit.stepper.value", before.uiKit?.stepper?.value, after.uiKit?.stepper?.value, to: &changes)
-        appendChange("uiKit.pageControl.currentPage", before.uiKit?.pageControl?.currentPage, after.uiKit?.pageControl?.currentPage, to: &changes)
-        appendChange("uiKit.progressView.value", before.uiKit?.progressView?.value, after.uiKit?.progressView?.value, to: &changes)
+        appendChange("uikit.scrollView.contentOffset", before.platform?.scrollView.map { pointSummary($0.contentOffset) }, after.platform?.scrollView.map { pointSummary($0.contentOffset) }, to: &changes)
+        appendChange("uikit.scrollView.contentSize", before.platform?.scrollView.map { sizeSummary($0.contentSize) }, after.platform?.scrollView.map { sizeSummary($0.contentSize) }, to: &changes)
+        appendChange("uikit.scrollView.contentInset", before.platform?.scrollView.map { insetsSummary($0.contentInset) }, after.platform?.scrollView.map { insetsSummary($0.contentInset) }, to: &changes)
+        appendChange("uikit.scrollView.adjustedContentInset", before.platform?.scrollView.map { insetsSummary($0.adjustedContentInset) }, after.platform?.scrollView.map { insetsSummary($0.adjustedContentInset) }, to: &changes)
+        appendChange("uikit.scrollView.scrollIndicatorInsets", before.platform?.scrollView.map { insetsSummary($0.scrollIndicatorInsets) }, after.platform?.scrollView.map { insetsSummary($0.scrollIndicatorInsets) }, to: &changes)
+        appendChange("uikit.scrollView.isScrollEnabled", before.platform?.scrollView?.isScrollEnabled, after.platform?.scrollView?.isScrollEnabled, to: &changes)
+        appendChange("uikit.scrollView.isPagingEnabled", before.platform?.scrollView?.isPagingEnabled, after.platform?.scrollView?.isPagingEnabled, to: &changes)
+        appendChange("uikit.scrollView.bounces", before.platform?.scrollView?.bounces, after.platform?.scrollView?.bounces, to: &changes)
+        appendChange("uikit.scrollView.showsVerticalScrollIndicator", before.platform?.scrollView?.showsVerticalScrollIndicator, after.platform?.scrollView?.showsVerticalScrollIndicator, to: &changes)
+        appendChange("uikit.scrollView.showsHorizontalScrollIndicator", before.platform?.scrollView?.showsHorizontalScrollIndicator, after.platform?.scrollView?.showsHorizontalScrollIndicator, to: &changes)
+        appendChange("uikit.switch.isOn", before.platform?.switchControl?.isOn, after.platform?.switchControl?.isOn, to: &changes)
+        appendChange("uikit.segmentedControl.selectedSegmentIndex", before.platform?.segmentedControl?.selectedSegmentIndex, after.platform?.segmentedControl?.selectedSegmentIndex, to: &changes)
+        appendChange("uikit.slider.value", before.platform?.slider?.value, after.platform?.slider?.value, to: &changes)
+        appendChange("uikit.stepper.value", before.platform?.stepper?.value, after.platform?.stepper?.value, to: &changes)
+        appendChange("uikit.pageControl.currentPage", before.platform?.pageControl?.currentPage, after.platform?.pageControl?.currentPage, to: &changes)
+        appendChange("uikit.progressView.value", before.platform?.progressView?.value, after.platform?.progressView?.value, to: &changes)
         return changes
     }
 
@@ -3833,7 +3833,7 @@ struct LoupeCLI {
     }
 
     private static func suppressesDiffAggregateText(_ node: LoupeNode, screen: LoupeSize) -> Bool {
-        if node.uiKit?.scrollView != nil {
+        if node.platform?.scrollView != nil {
             return true
         }
 
@@ -4709,14 +4709,15 @@ struct LoupeCLI {
     private static func viewTreeLine(_ node: LoupeNode) -> String {
         [
             node.ref,
-            node.uiKit?.className ?? node.typeName,
+            node.platform?.className ?? node.typeName,
             node.role.map { "role=\($0)" },
+            node.swiftui.map(swiftUISummary),
             node.testID.map { "testID=\($0)" },
             displayText(node).map { "text=\"\($0)\"" },
             node.frame.map { "frame=\(rectSummary($0))" },
-            node.uiKit?.layout.map(layoutSummary),
-            node.uiKit?.isFocused == true ? "focused" : nil,
-            node.uiKit?.canBecomeFocused == true ? "focusable" : nil,
+            node.platform?.layout.map(layoutSummary),
+            node.platform?.isFocused == true ? "focused" : nil,
+            node.platform?.canBecomeFocused == true ? "focusable" : nil,
             node.isVisible ? nil : "hidden",
         ].compactMap(\.self).joined(separator: " ")
     }
@@ -4733,6 +4734,36 @@ struct LoupeCLI {
             node.canBecomeFocused == true ? "focusable" : nil,
             node.isVisible ? nil : "hidden",
         ].compactMap(\.self).joined(separator: " ")
+    }
+
+    private static func swiftUISummary(_ swiftui: LoupeSwiftUIProperties) -> String {
+        var parts = ["swiftui=\(swiftui.origin)"]
+        if let rootTypeName = swiftui.rootTypeName {
+            parts.append("root=\(rootTypeName)")
+        }
+        if !swiftui.properties.isEmpty {
+            let properties = swiftui.properties.prefix(4).map { property in
+                if let value = property.value {
+                    return "\(property.name)=\(metadataValueSummary(value))"
+                }
+                return "\(property.name):\(property.typeName)"
+            }.joined(separator: ",")
+            parts.append("props=\(properties)")
+        }
+        return parts.joined(separator: " ")
+    }
+
+    private static func metadataValueSummary(_ value: LoupeMetadataValue) -> String {
+        switch value {
+        case let .string(value):
+            return "\"\(value)\""
+        case let .bool(value):
+            return "\(value)"
+        case let .int(value):
+            return "\(value)"
+        case let .double(value):
+            return format(value)
+        }
     }
 
     private static func rectSummary(_ rect: LoupeRect) -> String {
@@ -4778,7 +4809,7 @@ struct LoupeCLI {
     }
 
     private static func nodeConstraints(_ node: LoupeNode) -> [LoupeUILayoutConstraintProperties] {
-        guard let layout = node.uiKit?.layout else {
+        guard let layout = node.platform?.layout else {
             return []
         }
         var seen = Set<String>()
@@ -4801,7 +4832,7 @@ struct LoupeCLI {
         constraints: [LoupeUILayoutConstraintProperties]
     ) -> String {
         var lines = [
-            "\(node.ref) \(node.uiKit?.className ?? node.typeName) constraints=\(constraints.count)"
+            "\(node.ref) \(node.platform?.className ?? node.typeName) constraints=\(constraints.count)"
         ]
         if constraints.isEmpty {
             lines.append("No captured Auto Layout constraints for this node.")
@@ -4855,7 +4886,7 @@ struct LoupeCLI {
         let supported = MutationPropertySupport.supportedProperties(for: node)
         let unsupported = MutationPropertySupport.unsupportedExamples(for: node)
         var lines = [
-            "\(node.ref) \(node.uiKit?.className ?? node.typeName)",
+            "\(node.ref) \(node.platform?.className ?? node.typeName)",
             "supported: \(supported.isEmpty ? "none" : supported.joined(separator: ", "))",
         ]
         if !unsupported.isEmpty {
@@ -4877,8 +4908,7 @@ struct LoupeCLI {
 
     private static func jsonValue(in node: LoupeNode, keyPath: String) -> Any? {
         let normalizedPath = keyPath
-            .replacingOccurrences(of: "uiKit.switch.", with: "uiKit.switchControl.")
-            .replacingOccurrences(of: "uikit.", with: "uiKit.")
+            .replacingOccurrences(of: "uikit.switch.", with: "uikit.switchControl.")
         guard let data = try? JSONEncoder().encode(node),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
@@ -4939,7 +4969,7 @@ struct LoupeCLI {
             selector: response.selector,
             property: response.property,
             value: response.value,
-            targetType: response.after.uiKit?.className ?? response.after.typeName,
+            targetType: response.after.platform?.className ?? response.after.typeName,
             testID: testID,
             before: mutationNodeSummary(response.before),
             after: mutationNodeSummary(response.after),
@@ -5497,7 +5527,7 @@ struct LoupeCLI {
     private static func mutationNodeSummary(_ node: LoupeNode) -> LoupeMutationNodeSummary {
         LoupeMutationNodeSummary(
             ref: node.ref,
-            typeName: node.uiKit?.className ?? node.typeName,
+            typeName: node.platform?.className ?? node.typeName,
             role: node.role,
             testID: node.testID,
             text: displayText(node),

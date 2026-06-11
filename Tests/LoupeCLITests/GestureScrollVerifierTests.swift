@@ -53,7 +53,7 @@ import Testing
             isVisible: true,
             isEnabled: true,
             isInteractive: true,
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: "UICollectionView",
                 tag: 0,
                 alpha: 1,
@@ -111,7 +111,7 @@ import Testing
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: true,
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UICollectionView",
                         tag: 0,
                         alpha: 1,

@@ -197,13 +197,13 @@ grep -q 'Runtime Edited Bookmark' /tmp/loupe-bookmark-reflect-title.json
 grep -q '"className" : "UISwitch"' "$INSPECT_PATH"
 grep -q '"isOn" : true' "$INSPECT_PATH"
 .build/debug/loupe ui set --host "$HOST" --udid "$DEVICE" --test-id bookmark.detail.favorite switch.isOn false >/tmp/loupe-bookmark-set-favorite-off.json
-.build/debug/loupe act wait value --host "$HOST" --test-id bookmark.detail.favorite --key uiKit.switch.isOn --equals false --timeout 5 >/tmp/loupe-bookmark-wait-set-favorite-off.json
+.build/debug/loupe act wait value --host "$HOST" --test-id bookmark.detail.favorite --key uikit.switch.isOn --equals false --timeout 5 >/tmp/loupe-bookmark-wait-set-favorite-off.json
 .build/debug/loupe ui set --host "$HOST" --udid "$DEVICE" --test-id bookmark.detail.favorite switch.isOn true >/tmp/loupe-bookmark-set-favorite-on.json
-.build/debug/loupe act wait value --host "$HOST" --test-id bookmark.detail.favorite --key uiKit.switch.isOn --equals true --timeout 5 >/tmp/loupe-bookmark-wait-favorite-on.json
+.build/debug/loupe act wait value --host "$HOST" --test-id bookmark.detail.favorite --key uikit.switch.isOn --equals true --timeout 5 >/tmp/loupe-bookmark-wait-favorite-on.json
 .build/debug/loupe act tap --host "$HOST" --udid "$DEVICE" --test-id bookmark.detail.favorite.toggle --expect-visible bookmark.detail
-.build/debug/loupe act wait value --host "$HOST" --test-id bookmark.detail.favorite --key uiKit.switch.isOn --equals false --timeout 5 >/tmp/loupe-bookmark-wait-favorite-off.json
+.build/debug/loupe act wait value --host "$HOST" --test-id bookmark.detail.favorite --key uikit.switch.isOn --equals false --timeout 5 >/tmp/loupe-bookmark-wait-favorite-off.json
 .build/debug/loupe act tap --host "$HOST" --udid "$DEVICE" --test-id bookmark.detail.favorite.toggle --expect-visible bookmark.detail
-.build/debug/loupe act wait value --host "$HOST" --test-id bookmark.detail.favorite --key uiKit.switch.isOn --equals true --timeout 5 >/tmp/loupe-bookmark-wait-favorite-on-again.json
+.build/debug/loupe act wait value --host "$HOST" --test-id bookmark.detail.favorite --key uikit.switch.isOn --equals true --timeout 5 >/tmp/loupe-bookmark-wait-favorite-on-again.json
 .build/debug/loupe ui node "$SNAPSHOT_PATH" --test-id bookmark.detail.category > "$INSPECT_PATH"
 grep -q '"className" : "UISegmentedControl"' "$INSPECT_PATH"
 grep -q '"selectedSegmentIndex" : 0' "$INSPECT_PATH"

@@ -66,7 +66,7 @@ struct AccessibilityTreeTests {
                         activationPoint: LoupePoint(x: 195, y: 266),
                         isElement: true
                     ),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UIButton",
                         tag: 0,
                         alpha: 1,

@@ -102,7 +102,7 @@ public enum LoupeScreenMapper {
                     parentRef: node.parentRef,
                     depth: depths[node.ref] ?? 0,
                     typeName: node.typeName,
-                    className: node.uiKit?.className,
+                    className: node.platform?.className,
                     role: node.role,
                     testID: node.testID,
                     text: LoupeObservationCompactor.displayText(for: node),
@@ -122,7 +122,7 @@ public enum LoupeScreenMapper {
         if LoupeObservationCompactor.displayText(for: node) != nil { return true }
         if node.testID != nil || node.isInteractive { return true }
         if node.role != nil { return true }
-        if node.uiKit?.imageView != nil { return true }
+        if node.platform?.imageView != nil { return true }
         guard let style = node.style else { return false }
         return isMeaningfulStyle(style)
     }

@@ -126,7 +126,7 @@ import Testing
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: false,
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UILabel",
                         tag: 0,
                         alpha: 1,
@@ -220,7 +220,7 @@ import Testing
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: false,
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UILabel",
                         tag: 0,
                         alpha: 1,

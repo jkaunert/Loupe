@@ -105,7 +105,7 @@ struct SurfaceVisibilityTests {
                     role: "tableView",
                     frame: LoupeRect(x: 0, y: 0, width: 390, height: 844),
                     isInteractive: true,
-                    uiKit: Self.uiKitScrollView(),
+                    uikit: Self.uiKitScrollView(),
                     children: ["row"]
                 ),
                 "row": Self.node(
@@ -340,7 +340,7 @@ struct SurfaceVisibilityTests {
                     frame: LoupeRect(x: 33, y: 803, width: 276, height: 38),
                     isVisible: false,
                     isInteractive: true,
-                    uiKit: Self.uiKitTextField(className: "UISearchBarTextField", isFirstResponder: true)
+                    uikit: Self.uiKitTextField(className: "UISearchBarTextField", isFirstResponder: true)
                 ),
             ]
         )
@@ -521,7 +521,7 @@ struct SurfaceVisibilityTests {
         isVisible: Bool = true,
         isInteractive: Bool = false,
         accessibility: LoupeAccessibility? = nil,
-        uiKit: LoupeUIKitProperties? = nil,
+        uikit: LoupeUIKitProperties? = nil,
         custom: [String: LoupeMetadataValue] = [:],
         children: [String] = []
     ) -> LoupeNode {
@@ -543,7 +543,7 @@ struct SurfaceVisibilityTests {
                 LoupeStyle(backgroundColor: LoupeColor(red: 1, green: 1, blue: 1, alpha: $0))
             },
             accessibility: accessibility,
-            uiKit: uiKit,
+            uikit: uikit,
             custom: custom,
             children: children
         )

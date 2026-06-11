@@ -28,7 +28,7 @@ struct RuntimeTests {
                 activationPoint: LoupePoint(x: 60, y: 42),
                 isElement: true
             ),
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: "UIButton",
                 tag: 7,
                 alpha: 1,
@@ -51,9 +51,9 @@ struct RuntimeTests {
 
         #expect(node.accessibility?.identifier == "checkout.payButton")
         #expect(node.accessibility?.traits == ["button"])
-        #expect(node.uiKit?.className == "UIButton")
-        #expect(node.uiKit?.control?.controlEvents == ["touchUpInside"])
-        #expect(node.uiKit?.label?.textAlignment == "center")
+        #expect(node.platform?.className == "UIButton")
+        #expect(node.platform?.control?.controlEvents == ["touchUpInside"])
+        #expect(node.platform?.label?.textAlignment == "center")
         #expect(node.style?.tintColor?.blue == 1)
         #expect(node.style?.shadowRadius == 8)
         #expect(node.style?.shadowOffset == LoupeSize(width: 0, height: 2))
@@ -71,7 +71,7 @@ struct RuntimeTests {
             isVisible: true,
             isEnabled: true,
             isInteractive: true,
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: "UIPickerView",
                 tag: 0,
                 alpha: 1,
@@ -109,25 +109,25 @@ struct RuntimeTests {
             )
         )
 
-        #expect(node.uiKit?.stepper?.value == 4)
-        #expect(node.uiKit?.stepper?.stepValue == 2)
-        #expect(node.uiKit?.datePicker?.mode == "date")
-        #expect(node.uiKit?.datePicker?.date == date)
-        #expect(node.uiKit?.pageControl?.currentPage == 2)
-        #expect(node.uiKit?.pageControl?.numberOfPages == 5)
-        #expect(node.uiKit?.progressView?.value == 0.65)
-        #expect(node.uiKit?.activityIndicator?.isAnimating == true)
-        #expect(node.uiKit?.activityIndicator?.style == "medium")
-        #expect(node.uiKit?.imageView?.imageSize == LoupeSize(width: 20, height: 20))
-        #expect(node.uiKit?.pickerView?.numberOfComponents == 1)
-        #expect(node.uiKit?.pickerView?.selectedRows == [1])
-        #expect(node.uiKit?.tabBar?.items == ["Home", "Search"])
-        #expect(node.uiKit?.tabBar?.selectedItem == "Home")
-        #expect(node.uiKit?.scrollView?.contentInset.bottom == 20)
-        #expect(node.uiKit?.scrollView?.scrollIndicatorInsets.bottom == 34)
-        #expect(node.uiKit?.scrollView?.showsHorizontalScrollIndicator == false)
-        #expect(node.uiKit?.webView?.url == "https://loupe.local/fixture")
-        #expect(node.uiKit?.webView?.title == "Web Fixture")
+        #expect(node.platform?.stepper?.value == 4)
+        #expect(node.platform?.stepper?.stepValue == 2)
+        #expect(node.platform?.datePicker?.mode == "date")
+        #expect(node.platform?.datePicker?.date == date)
+        #expect(node.platform?.pageControl?.currentPage == 2)
+        #expect(node.platform?.pageControl?.numberOfPages == 5)
+        #expect(node.platform?.progressView?.value == 0.65)
+        #expect(node.platform?.activityIndicator?.isAnimating == true)
+        #expect(node.platform?.activityIndicator?.style == "medium")
+        #expect(node.platform?.imageView?.imageSize == LoupeSize(width: 20, height: 20))
+        #expect(node.platform?.pickerView?.numberOfComponents == 1)
+        #expect(node.platform?.pickerView?.selectedRows == [1])
+        #expect(node.platform?.tabBar?.items == ["Home", "Search"])
+        #expect(node.platform?.tabBar?.selectedItem == "Home")
+        #expect(node.platform?.scrollView?.contentInset.bottom == 20)
+        #expect(node.platform?.scrollView?.scrollIndicatorInsets.bottom == 34)
+        #expect(node.platform?.scrollView?.showsHorizontalScrollIndicator == false)
+        #expect(node.platform?.webView?.url == "https://loupe.local/fixture")
+        #expect(node.platform?.webView?.title == "Web Fixture")
     }
 
     @Test func scrollViewPropertiesDecodeOlderSnapshots() throws {
@@ -189,7 +189,7 @@ struct RuntimeTests {
             isVisible: true,
             isEnabled: true,
             isInteractive: false,
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: "UIStackView",
                 tag: 0,
                 alpha: 1,
@@ -231,15 +231,15 @@ struct RuntimeTests {
             )
         )
 
-        #expect(node.uiKit?.layout?.translatesAutoresizingMaskIntoConstraints == false)
-        #expect(node.uiKit?.layout?.isAmbiguousLayout == true)
-        #expect(node.uiKit?.layout?.hugging.horizontal == 250)
-        #expect(node.uiKit?.layout?.compressionResistance.vertical == 751)
-        #expect(node.uiKit?.layout?.constraints.first?.id == "c-height")
-        #expect(node.uiKit?.layout?.constraints.first?.identifier == "height")
-        #expect(node.uiKit?.stackView?.axis == "horizontal")
-        #expect(node.uiKit?.stackView?.distribution == "fillEqually")
-        #expect(node.uiKit?.stackView?.arrangedSubviewCount == 3)
+        #expect(node.platform?.layout?.translatesAutoresizingMaskIntoConstraints == false)
+        #expect(node.platform?.layout?.isAmbiguousLayout == true)
+        #expect(node.platform?.layout?.hugging.horizontal == 250)
+        #expect(node.platform?.layout?.compressionResistance.vertical == 751)
+        #expect(node.platform?.layout?.constraints.first?.id == "c-height")
+        #expect(node.platform?.layout?.constraints.first?.identifier == "height")
+        #expect(node.platform?.stackView?.axis == "horizontal")
+        #expect(node.platform?.stackView?.distribution == "fillEqually")
+        #expect(node.platform?.stackView?.arrangedSubviewCount == 3)
     }
 
     @Test func layoutPropertiesDecodeOlderSnapshots() throws {

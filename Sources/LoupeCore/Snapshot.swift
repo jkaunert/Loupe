@@ -117,6 +117,50 @@ public struct LoupeNodeRuntimeProperties: Codable, Equatable {
     }
 }
 
+public struct LoupeSwiftUIProperty: Codable, Equatable {
+    public var name: String
+    public var typeName: String
+    public var value: LoupeMetadataValue?
+    public var evidence: [String]
+
+    public init(
+        name: String,
+        typeName: String,
+        value: LoupeMetadataValue? = nil,
+        evidence: [String] = []
+    ) {
+        self.name = name
+        self.typeName = typeName
+        self.value = value
+        self.evidence = evidence
+    }
+}
+
+public struct LoupeSwiftUIProperties: Codable, Equatable {
+    public var origin: String
+    public var backingTypeName: String
+    public var viewController: String?
+    public var rootTypeName: String?
+    public var properties: [LoupeSwiftUIProperty]
+    public var evidence: [String]
+
+    public init(
+        origin: String,
+        backingTypeName: String,
+        viewController: String? = nil,
+        rootTypeName: String? = nil,
+        properties: [LoupeSwiftUIProperty] = [],
+        evidence: [String] = []
+    ) {
+        self.origin = origin
+        self.backingTypeName = backingTypeName
+        self.viewController = viewController
+        self.rootTypeName = rootTypeName
+        self.properties = properties
+        self.evidence = evidence
+    }
+}
+
 public struct LoupeUIControlProperties: Codable, Equatable {
     public var controlState: String?
     public var controlEvents: [String]
@@ -684,6 +728,31 @@ public struct LoupeUIKitProperties: Codable, Equatable {
     }
 }
 
+@dynamicMemberLookup
+public struct LoupeAppKitProperties: Codable, Equatable {
+    private var storage: LoupeUIKitProperties
+
+    public init(storage: LoupeUIKitProperties) {
+        self.storage = storage
+    }
+
+    public subscript<Value>(dynamicMember keyPath: KeyPath<LoupeUIKitProperties, Value>) -> Value {
+        storage[keyPath: keyPath]
+    }
+
+    public init(from decoder: Decoder) throws {
+        storage = try LoupeUIKitProperties(from: decoder)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        try storage.encode(to: encoder)
+    }
+
+    public var commonViewProperties: LoupeUIKitProperties {
+        storage
+    }
+}
+
 public struct LoupeNode: Codable, Equatable {
     public var ref: String
     public var parentRef: String?
@@ -704,9 +773,15 @@ public struct LoupeNode: Codable, Equatable {
     public var style: LoupeStyle?
     public var accessibility: LoupeAccessibility?
     public var runtime: LoupeNodeRuntimeProperties?
-    public var uiKit: LoupeUIKitProperties?
+    public var uikit: LoupeUIKitProperties?
+    public var appkit: LoupeAppKitProperties?
+    public var swiftui: LoupeSwiftUIProperties?
     public var custom: [String: LoupeMetadataValue]
     public var children: [String]
+
+    public var platform: LoupeUIKitProperties? {
+        uikit ?? appkit?.commonViewProperties
+    }
 
     private enum CodingKeys: String, CodingKey {
         case ref
@@ -728,7 +803,9 @@ public struct LoupeNode: Codable, Equatable {
         case style
         case accessibility
         case runtime
-        case uiKit
+        case uikit
+        case appkit
+        case swiftui
         case custom
         case children
     }
@@ -753,7 +830,9 @@ public struct LoupeNode: Codable, Equatable {
         style: LoupeStyle? = nil,
         accessibility: LoupeAccessibility? = nil,
         runtime: LoupeNodeRuntimeProperties? = nil,
-        uiKit: LoupeUIKitProperties? = nil,
+        uikit: LoupeUIKitProperties? = nil,
+        appkit: LoupeAppKitProperties? = nil,
+        swiftui: LoupeSwiftUIProperties? = nil,
         custom: [String: LoupeMetadataValue] = [:],
         children: [String] = []
     ) {
@@ -776,7 +855,9 @@ public struct LoupeNode: Codable, Equatable {
         self.style = style
         self.accessibility = accessibility
         self.runtime = runtime
-        self.uiKit = uiKit
+        self.uikit = uikit
+        self.appkit = appkit
+        self.swiftui = swiftui
         self.custom = custom
         self.children = children
     }
@@ -803,7 +884,9 @@ public struct LoupeNode: Codable, Equatable {
         style = try container.decodeIfPresent(LoupeStyle.self, forKey: .style)
         accessibility = try container.decodeIfPresent(LoupeAccessibility.self, forKey: .accessibility)
         runtime = try container.decodeIfPresent(LoupeNodeRuntimeProperties.self, forKey: .runtime)
-        uiKit = try container.decodeIfPresent(LoupeUIKitProperties.self, forKey: .uiKit)
+        uikit = try container.decodeIfPresent(LoupeUIKitProperties.self, forKey: .uikit)
+        appkit = try container.decodeIfPresent(LoupeAppKitProperties.self, forKey: .appkit)
+        swiftui = try container.decodeIfPresent(LoupeSwiftUIProperties.self, forKey: .swiftui)
         custom = try container.decodeIfPresent([String: LoupeMetadataValue].self, forKey: .custom) ?? [:]
         children = try container.decodeIfPresent([String].self, forKey: .children) ?? []
     }

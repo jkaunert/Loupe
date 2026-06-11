@@ -85,7 +85,7 @@ import Testing
             isVisible: true,
             isEnabled: true,
             isInteractive: control != nil || button != nil,
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: className,
                 tag: 0,
                 alpha: 1,

@@ -45,7 +45,7 @@ struct ObservationCompactorTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: true,
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UIButton",
                         tag: 0,
                         alpha: 1,
@@ -273,7 +273,7 @@ struct ObservationCompactorTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: false,
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "_UITabBarContainerView",
                         tag: 0,
                         alpha: 1,
@@ -393,7 +393,7 @@ struct ObservationCompactorTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: true,
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UILayoutContainerView",
                         tag: 0,
                         alpha: 1,
@@ -602,7 +602,7 @@ struct ObservationCompactorTests {
                     isEnabled: true,
                     isInteractive: true,
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         viewControllerRole: "navigationController",
                         className: "ConflictingUserClassName",
                         tag: 0,
@@ -848,7 +848,7 @@ struct ObservationCompactorTests {
                         isElement: false
                     ),
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "ConflictingUserClassName",
                         tag: 0,
                         alpha: 1,
@@ -873,7 +873,7 @@ struct ObservationCompactorTests {
                     isEnabled: true,
                     isInteractive: false,
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.UIKitCore"),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UIImageView",
                         tag: 0,
                         alpha: 1,
@@ -941,7 +941,7 @@ struct ObservationCompactorTests {
                         isElement: false
                     ),
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.example.App"),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "_UITableCellAccessoryButton",
                         tag: 0,
                         alpha: 1,
@@ -966,7 +966,7 @@ struct ObservationCompactorTests {
                     isEnabled: true,
                     isInteractive: false,
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.example.App"),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UIImageView",
                         tag: 0,
                         alpha: 1,
@@ -1015,7 +1015,7 @@ struct ObservationCompactorTests {
                     isEnabled: true,
                     isInteractive: true,
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.example.Charts"),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "BarChartView",
                         tag: 0,
                         alpha: 1,
@@ -1077,7 +1077,7 @@ struct ObservationCompactorTests {
                     isEnabled: true,
                     isInteractive: true,
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.WebKit"),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "WKContentView",
                         tag: 0,
                         alpha: 1,
@@ -1137,7 +1137,7 @@ struct ObservationCompactorTests {
                     isEnabled: true,
                     isInteractive: true,
                     runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.SwiftUI"),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "_UIHostingView<RegistrationPermissionsView>",
                         tag: 0,
                         alpha: 1,

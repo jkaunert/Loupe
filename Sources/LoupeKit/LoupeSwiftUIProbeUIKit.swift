@@ -22,6 +22,7 @@ private struct LoupeSwiftUIProbeRepresentable: UIViewRepresentable {
         let view = UIView(frame: .zero)
         view.testID(id)
         view.testProperty("loupe.probe", true)
+        view.testProperty("loupe.swiftUI", true)
         view.isAccessibilityElement = true
         view.accessibilityLabel = label ?? id
         view.backgroundColor = .clear
@@ -31,6 +32,7 @@ private struct LoupeSwiftUIProbeRepresentable: UIViewRepresentable {
     func updateUIView(_ uiView: UIView, context: Context) {
         uiView.testID(id)
         uiView.testProperty("loupe.probe", true)
+        uiView.testProperty("loupe.swiftUI", true)
         uiView.isAccessibilityElement = true
         uiView.accessibilityLabel = label ?? id
         uiView.backgroundColor = .clear

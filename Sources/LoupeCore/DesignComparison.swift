@@ -1261,7 +1261,7 @@ public enum LoupeDesignComparator {
             return true
         }
         if normalizedExpected == "textfield",
-           appNode.uiKit?.textField != nil,
+           appNode.platform?.textField != nil,
            !appNode.isInteractive {
             return true
         }
@@ -1389,7 +1389,7 @@ public enum LoupeDesignComparator {
         guard !appNode.isInteractive else {
             return false
         }
-        guard appNode.role == "staticText" || appNode.uiKit?.textField != nil else {
+        guard appNode.role == "staticText" || appNode.platform?.textField != nil else {
             return false
         }
         return true
@@ -1397,7 +1397,7 @@ public enum LoupeDesignComparator {
 
     private static func isSwitchLike(_ node: LoupeNode) -> Bool {
         node.role == "switch"
-            || node.uiKit?.switchControl != nil
+            || node.platform?.switchControl != nil
             || node.typeName.localizedCaseInsensitiveContains("Switch")
     }
 

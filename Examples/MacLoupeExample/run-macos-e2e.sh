@@ -76,13 +76,16 @@ INSPECT_EMPTY_PATH="/tmp/loupe-macos-inspect-empty.json"
 QUERY_PATH="/tmp/loupe-macos-query.json"
 DETAIL_SNAPSHOT_PATH="/tmp/loupe-macos-detail-snapshot.json"
 LONG_LIST_SNAPSHOT_PATH="/tmp/loupe-macos-long-list-snapshot.json"
+SWIFTUI_SNAPSHOT_PATH="/tmp/loupe-macos-swiftui-snapshot.json"
 DETAIL_TRACE_DIR="/tmp/loupe-macos-detail-route-trace"
 DETAIL_BACK_TRACE_DIR="/tmp/loupe-macos-detail-back-trace"
 LONG_LIST_TRACE_DIR="/tmp/loupe-macos-long-list-route-trace"
 LONG_LIST_BACK_TRACE_DIR="/tmp/loupe-macos-long-list-back-trace"
+SWIFTUI_TRACE_DIR="/tmp/loupe-macos-swiftui-route-trace"
+SWIFTUI_BACK_TRACE_DIR="/tmp/loupe-macos-swiftui-back-trace"
 
-rm -f "$APP_LOG" "$SNAPSHOT_PATH" "$DARK_SNAPSHOT_PATH" "$ACCESSIBILITY_PATH" "$VIEW_TREE_PATH" "$ACCESSIBILITY_TREE_PATH" "$LOGS_PATH" "$ROUTE_LOGS_PATH" "$NEW_NAV_LOGS_PATH" "$LOGOUT_LOGS_PATH" "$NETWORK_PATH" "$REFS_PATH" "$OBJECT_GRAPH_PATH" "$OBJECT_CLASSES_PATH" "$OBJECT_DESCRIPTION_PATH" "$LEAKS_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$LOGOUT_FLAG_SET_PATH" "$EMPTY_FLAG_PATH" "$ERROR_FLAG_PATH" "$ERROR_FLAG_SET_PATH" "$ERROR_SNAPSHOT_PATH" "$ERROR_INSPECT_PATH" "$ERROR_LOGS_PATH" "$KEYCHAIN_PATH" "$KEYCHAIN_AFTER_LOGOUT_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$ENV_PATH" "$AUDIT_PATH" "$PERF_PATH" "$DETAIL_SCROLL_PATH" "$LONG_LIST_SCROLL_PATH" "$MUTATION_PATH" "$INSPECT_PATH" "$INSPECT_TITLE_PATH" "$INSPECT_EMPTY_PATH" "$QUERY_PATH" "$DETAIL_SNAPSHOT_PATH" "$LONG_LIST_SNAPSHOT_PATH"
-rm -rf "$DETAIL_TRACE_DIR" "$DETAIL_BACK_TRACE_DIR" "$LONG_LIST_TRACE_DIR" "$LONG_LIST_BACK_TRACE_DIR"
+rm -f "$APP_LOG" "$SNAPSHOT_PATH" "$DARK_SNAPSHOT_PATH" "$ACCESSIBILITY_PATH" "$VIEW_TREE_PATH" "$ACCESSIBILITY_TREE_PATH" "$LOGS_PATH" "$ROUTE_LOGS_PATH" "$NEW_NAV_LOGS_PATH" "$LOGOUT_LOGS_PATH" "$NETWORK_PATH" "$REFS_PATH" "$OBJECT_GRAPH_PATH" "$OBJECT_CLASSES_PATH" "$OBJECT_DESCRIPTION_PATH" "$LEAKS_PATH" "$FLAG_PATH" "$FLAG_SET_PATH" "$LOGOUT_FLAG_SET_PATH" "$EMPTY_FLAG_PATH" "$ERROR_FLAG_PATH" "$ERROR_FLAG_SET_PATH" "$ERROR_SNAPSHOT_PATH" "$ERROR_INSPECT_PATH" "$ERROR_LOGS_PATH" "$KEYCHAIN_PATH" "$KEYCHAIN_AFTER_LOGOUT_PATH" "$HIT_TEST_PATH" "$RESPONDER_PATH" "$ENV_PATH" "$AUDIT_PATH" "$PERF_PATH" "$DETAIL_SCROLL_PATH" "$LONG_LIST_SCROLL_PATH" "$MUTATION_PATH" "$INSPECT_PATH" "$INSPECT_TITLE_PATH" "$INSPECT_EMPTY_PATH" "$QUERY_PATH" "$DETAIL_SNAPSHOT_PATH" "$LONG_LIST_SNAPSHOT_PATH" "$SWIFTUI_SNAPSHOT_PATH"
+rm -rf "$DETAIL_TRACE_DIR" "$DETAIL_BACK_TRACE_DIR" "$LONG_LIST_TRACE_DIR" "$LONG_LIST_BACK_TRACE_DIR" "$SWIFTUI_TRACE_DIR" "$SWIFTUI_BACK_TRACE_DIR"
 
 DYLD_INSERT_LIBRARIES="$INJECTOR_PATH" LOUPE_PORT="$PORT" "$APP_EXECUTABLE" >"$APP_LOG" 2>&1 &
 APP_PID=$!
@@ -173,6 +176,30 @@ BUTTON_POINT="$(ruby -rjson -e '
 .build/debug/loupe debug scroll --host "$HOST" --test-id mac.example.longList.scroll --delta 0,120 --output "$LONG_LIST_SCROLL_PATH" >/dev/null
 .build/debug/loupe act tap --backend runtime --host "$HOST" --test-id mac.example.longList.back --trace-dir "$LONG_LIST_BACK_TRACE_DIR" --expect-visible mac.example.root
 .build/debug/loupe act wait visible --host "$HOST" --test-id mac.example.refresh --timeout 5 >/tmp/loupe-macos-wait-workbench-after-long-list.json
+.build/debug/loupe act tap --backend runtime --host "$HOST" --test-id mac.example.openSwiftUI --trace-dir "$SWIFTUI_TRACE_DIR" --expect-visible mac.example.swiftuiRoute
+.build/debug/loupe act wait visible --host "$HOST" --test-id mac.example.swiftuiRoute.probe --timeout 5 >/tmp/loupe-macos-wait-swiftui-route.json
+.build/debug/loupe ui snapshot --host "$HOST" --timeout 10 --output "$SWIFTUI_SNAPSHOT_PATH" >/dev/null
+ruby -rjson -e '
+  snapshot = JSON.parse(File.read(ARGV.fetch(0)))
+  by_test_id = snapshot.fetch("nodes").values.each_with_object({}) { |node, map| map[node["testID"]] = node if node["testID"] }
+  root = by_test_id.fetch("mac.example.swiftuiRoute")
+  host = by_test_id.fetch("mac.example.swiftuiRoute.host")
+  probe = by_test_id.fetch("mac.example.swiftuiRoute.probe")
+  by_test_id.fetch("mac.example.swiftuiRoute.controls")
+  by_test_id.fetch("mac.example.swiftuiRoute.rows")
+  by_test_id.fetch("mac.example.swiftuiRoute.row.1")
+  abort "expected macOS SwiftUI route root" unless root.fetch("custom").dig("platform", "value") == "macOS"
+  abort "expected macOS SwiftUI route host metadata" unless host.dig("swiftui", "origin") == "host"
+  abort "expected macOS SwiftUI route probe metadata" unless probe.dig("swiftui", "origin") == "probe"
+  abort "expected macOS SwiftUI root type summary" unless host.dig("swiftui", "rootTypeName") == "MacSwiftUIScreenView"
+  properties = host.dig("swiftui", "properties") || []
+  abort "expected macOS SwiftUI private property summary" unless properties.any? { |property|
+    property["name"] == "mode" && property.dig("value", "value") == "Inspect"
+  }
+  abort "expected macOS SwiftUI route probe label" unless probe["label"] == "macOS SwiftUI route probe"
+' "$SWIFTUI_SNAPSHOT_PATH"
+.build/debug/loupe act tap --backend runtime --host "$HOST" --test-id mac.example.swiftuiRoute.back --trace-dir "$SWIFTUI_BACK_TRACE_DIR" --expect-visible mac.example.root
+.build/debug/loupe act wait visible --host "$HOST" --test-id mac.example.refresh --timeout 5 >/tmp/loupe-macos-wait-workbench-after-swiftui.json
 .build/debug/loupe debug logs --host "$HOST" --output "$ROUTE_LOGS_PATH" >/dev/null
 .build/debug/loupe ui set --host "$HOST" --test-id mac.example.status text "AppKit mutation applied" --no-animate --output "$MUTATION_PATH" >/dev/null
 .build/debug/loupe ui appearance dark --host "$HOST" --output "$ENV_PATH" >/dev/null
@@ -188,7 +215,7 @@ BUTTON_POINT="$(ruby -rjson -e '
 
 ruby -rjson -e '
   snapshot = JSON.parse(File.read(ARGV.fetch(0)))
-  abort "expected AppKit snapshot" unless snapshot.fetch("nodes").values.any? { |node| node["uiKit"] && node["typeName"] == "NSScrollView" }
+  abort "expected AppKit snapshot" unless snapshot.fetch("nodes").values.any? { |node| node["appkit"] && node["typeName"] == "NSScrollView" }
   abort "missing mac.example.list" unless snapshot.fetch("nodes").values.any? { |node| node["testID"] == "mac.example.list" }
   view_tree = File.read(ARGV.fetch(21))
   ax_tree = File.read(ARGV.fetch(22))
@@ -213,13 +240,13 @@ ruby -rjson -e '
   abort "expected AppKit accessibility value" unless title.dig("accessibility", "value") == "Mac Loupe Workbench"
   abort "expected AppKit font name" unless title.dig("style", "fontName")
   abort "expected AppKit font size" unless title.dig("style", "fontSize").is_a?(Numeric)
-  abort "expected AppKit label properties" unless title.dig("uiKit", "label", "textAlignment") == "natural"
-  abort "expected AppKit label line break mode" unless title.dig("uiKit", "label", "lineBreakMode")
+  abort "expected AppKit label properties" unless title.dig("appkit", "label", "textAlignment") == "natural"
+  abort "expected AppKit label line break mode" unless title.dig("appkit", "label", "lineBreakMode")
 
   by_test_id = snapshot.fetch("nodes").values.each_with_object({}) { |node, map| map[node["testID"]] = node if node["testID"] }
   abort "missing mac.example.emptyFeed" unless by_test_id["mac.example.emptyFeed"]
   empty = JSON.parse(File.read(ARGV.fetch(15))).fetch("node")
-  abort "expected AppKit empty feed scroll view" unless empty.dig("uiKit", "className") == "NSScrollView"
+  abort "expected AppKit empty feed scroll view" unless empty.dig("appkit", "className") == "NSScrollView"
   abort "expected empty feed role" unless empty["role"] == "scrollView"
   empty_rows = snapshot.fetch("nodes").values.select { |node| node["testID"]&.start_with?("mac.example.emptyFeed.row") }
   abort "expected no rendered empty feed rows" unless empty_rows.empty?
@@ -228,30 +255,30 @@ ruby -rjson -e '
 
   segmented = by_test_id.fetch("mac.example.segmented")
   abort "expected AppKit segmented role" unless segmented["role"] == "segmentedControl"
-  abort "expected AppKit segmented selection" unless segmented.dig("uiKit", "segmentedControl", "selectedSegmentIndex") == 1
-  abort "expected AppKit segmented labels" unless segmented.dig("uiKit", "segmentedControl", "segments") == ["List", "Detail"]
+  abort "expected AppKit segmented selection" unless segmented.dig("appkit", "segmentedControl", "selectedSegmentIndex") == 1
+  abort "expected AppKit segmented labels" unless segmented.dig("appkit", "segmentedControl", "segments") == ["List", "Detail"]
 
   slider = by_test_id.fetch("mac.example.slider")
   abort "expected AppKit slider role" unless slider["role"] == "slider"
-  abort "expected AppKit slider value" unless slider.dig("uiKit", "slider", "value") == 42
-  abort "expected AppKit slider range" unless slider.dig("uiKit", "slider", "minimumValue") == 0 && slider.dig("uiKit", "slider", "maximumValue") == 100
+  abort "expected AppKit slider value" unless slider.dig("appkit", "slider", "value") == 42
+  abort "expected AppKit slider range" unless slider.dig("appkit", "slider", "minimumValue") == 0 && slider.dig("appkit", "slider", "maximumValue") == 100
 
   stepper = by_test_id.fetch("mac.example.stepper")
   abort "expected AppKit stepper role" unless stepper["role"] == "stepper"
-  abort "expected AppKit stepper value" unless stepper.dig("uiKit", "stepper", "value") == 4
-  abort "expected AppKit stepper increment" unless stepper.dig("uiKit", "stepper", "stepValue") == 2
+  abort "expected AppKit stepper value" unless stepper.dig("appkit", "stepper", "value") == 4
+  abort "expected AppKit stepper increment" unless stepper.dig("appkit", "stepper", "stepValue") == 2
 
   progress = by_test_id.fetch("mac.example.progress")
   abort "expected AppKit progress role" unless progress["role"] == "progress"
-  abort "expected AppKit normalized progress" unless (progress.dig("uiKit", "progressView", "value").to_f - 0.65).abs < 0.001
+  abort "expected AppKit normalized progress" unless (progress.dig("appkit", "progressView", "value").to_f - 0.65).abs < 0.001
 
   image = by_test_id.fetch("mac.example.image")
   abort "expected AppKit image role" unless image["role"] == "image"
-  abort "expected AppKit image size" unless image.dig("uiKit", "imageView", "imageSize", "width") == 24 && image.dig("uiKit", "imageView", "imageSize", "height") == 24
+  abort "expected AppKit image size" unless image.dig("appkit", "imageView", "imageSize", "width") == 24 && image.dig("appkit", "imageView", "imageSize", "height") == 24
   abort "native AX child should not be present in view snapshot" if by_test_id["mac.example.nativeAX.action"]
   by_test_id.fetch("mac.example.swiftui.host")
   swiftui_probe = by_test_id.fetch("mac.example.swiftui.probe")
-  abort "expected SwiftUI probe NSViewRepresentable class evidence" unless swiftui_probe.dig("uiKit", "className") == "NSView"
+  abort "expected SwiftUI probe NSViewRepresentable class evidence" unless swiftui_probe.dig("appkit", "className") == "NSView"
   swiftui_probe_frame = swiftui_probe.fetch("frame")
   abort "expected macOS SwiftUI probe bounds width" unless swiftui_probe_frame.fetch("width").to_f > 100
   abort "expected macOS SwiftUI probe bounds height" unless swiftui_probe_frame.fetch("height").to_f > 40
@@ -362,7 +389,7 @@ ruby -rjson -e '
   abort "expected macOS detail route root" unless detail_ids.include?("mac.example.detail")
   abort "expected macOS detail route summary" unless detail_ids.include?("mac.example.detail.summary")
   detail_scroll = detail_snapshot.fetch("nodes").values.find { |node| node["testID"] == "mac.example.detail.scroll" }
-  abort "expected macOS detail scroll route" unless detail_scroll && detail_scroll.dig("uiKit", "scrollView", "contentSize", "height").to_f > detail_scroll.fetch("frame").fetch("height").to_f
+  abort "expected macOS detail scroll route" unless detail_scroll && detail_scroll.dig("appkit", "scrollView", "contentSize", "height").to_f > detail_scroll.fetch("frame").fetch("height").to_f
   detail_perf = JSON.parse(File.read(ARGV.fetch(28)))
   abort "expected macOS detail scroll target" unless detail_perf["testID"] == "mac.example.detail.scroll"
   abort "expected macOS detail positive scroll delta" unless detail_perf.dig("delta", "y").to_f > 0
@@ -386,6 +413,7 @@ ruby -rjson -e '
   route_logs = JSON.parse(File.read(ARGV.fetch(35)))
   abort "missing macOS detail route log" unless route_logs.any? { |entry| entry["message"] == "mac_example_detail_route" }
   abort "missing macOS long-list route log" unless route_logs.any? { |entry| entry["message"] == "mac_example_long_list_route" }
+  abort "missing macOS SwiftUI route log" unless route_logs.any? { |entry| entry["message"] == "mac_example_swiftui_route" }
   abort "missing macOS workbench route log" unless route_logs.any? { |entry| entry["message"] == "mac_example_workbench_route" }
 
   mutation = JSON.parse(File.read(ARGV.fetch(19)))

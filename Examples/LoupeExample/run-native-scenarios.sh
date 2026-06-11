@@ -223,7 +223,7 @@ GRABBER_REF="$(query_ref example.bottomSheet.grabber)"
 fetch_snapshot
 EXPANDED_Y="$(inspect_value example.bottomSheet.scrollView node.frame.y)"
 EXPANDED_HEIGHT="$(inspect_value example.bottomSheet.scrollView node.frame.height)"
-CONTENT_HEIGHT="$(inspect_value example.bottomSheet.scrollView node.uiKit.scrollView.contentSize.height)"
+CONTENT_HEIGHT="$(inspect_value example.bottomSheet.scrollView node.uikit.scrollView.contentSize.height)"
 ruby -e '
   moved_up = ARGV.fetch(0).to_f < ARGV.fetch(1).to_f - 120
   grew = ARGV.fetch(2).to_f > ARGV.fetch(3).to_f + 120
@@ -504,7 +504,7 @@ ruby -rjson -e '
 ' "$CONSTRAINT_DEACTIVATE_PATH"
 
 echo "case: mixed fixture tabs for SwiftUI, WebKit, keyboard, and nested scroll"
-launch_app fixtures
+launch_app fixtures.swiftui
 .build/debug/loupe act wait visible --host "$HOST" --test-id example.fixtures --timeout 5 >/tmp/loupe-native-wait-fixtures.json
 fetch_snapshot
 assert_query example.fixtures /tmp/loupe-native-fixtures-query.json
@@ -516,8 +516,22 @@ assert_query example.fixtures.tab.nested /tmp/loupe-native-nested-tab-query.json
 .build/debug/loupe ui node "$SNAPSHOT_PATH" --test-id example.fixtures.swiftui.probe > "$INSPECT_PATH"
 .build/debug/loupe ui accessibility "$SNAPSHOT_PATH" > "$ACCESSIBILITY_PATH"
 ruby -rjson -e '
+  snapshot = JSON.parse(File.read(ARGV.fetch(2)))
   probe = JSON.parse(File.read(ARGV.fetch(0))).fetch("node")
-  abort "expected SwiftUI probe UIViewRepresentable class evidence" unless probe.dig("uiKit", "className") == "UIView"
+  host = snapshot.fetch("nodes").values.find { |node| node["testID"] == "example.fixtures.swiftui.host" }
+  abort "missing SwiftUI host" unless host
+  by_test_id = snapshot.fetch("nodes").values.each_with_object({}) { |node, map| map[node["testID"]] = node if node["testID"] }
+  by_test_id.fetch("example.fixtures.swiftui.controls")
+  by_test_id.fetch("example.fixtures.swiftui.rows")
+  by_test_id.fetch("example.fixtures.swiftui.row.1")
+  abort "expected SwiftUI host metadata" unless host.dig("swiftui", "origin") == "host"
+  abort "expected SwiftUI probe metadata" unless probe.dig("swiftui", "origin") == "probe"
+  abort "expected SwiftUI root type summary" unless host.dig("swiftui", "rootTypeName") == "SwiftUIFixtureView"
+  properties = host.dig("swiftui", "properties") || []
+  abort "expected SwiftUI private property summary" unless properties.any? { |property|
+    property["name"] == "mode" && property.dig("value", "value") == "Focus"
+  }
+  abort "expected SwiftUI probe UIViewRepresentable class evidence" unless probe.dig("uikit", "className") == "UIView"
   frame = probe.fetch("frame")
   abort "expected SwiftUI probe bounds width" unless frame.fetch("width").to_f > 100
   abort "expected SwiftUI probe bounds height" unless frame.fetch("height").to_f > 80
@@ -526,7 +540,7 @@ ruby -rjson -e '
   probe_ax = nodes.find { |node| node["testID"] == "example.fixtures.swiftui.probe" }
   abort "missing SwiftUI probe accessibility node" unless probe_ax && probe_ax["label"] == "iOS SwiftUI probe"
   abort "expected SwiftUI probe source ref" unless probe_ax["sourceRef"] == probe.fetch("ref")
-' "$INSPECT_PATH" "$ACCESSIBILITY_PATH"
+' "$INSPECT_PATH" "$ACCESSIBILITY_PATH" "$SNAPSHOT_PATH"
 
 launch_app fixtures.web
 .build/debug/loupe act wait visible --host "$HOST" --test-id example.fixtures.web.webView --timeout 5 >/tmp/loupe-native-wait-web.json

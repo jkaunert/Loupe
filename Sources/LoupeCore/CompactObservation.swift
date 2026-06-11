@@ -175,7 +175,7 @@ public enum LoupeObservationCompactor {
                 return (node, LoupeVisibleText(
                     ref: node.ref,
                     typeName: node.typeName,
-                    className: node.uiKit?.className,
+                    className: node.platform?.className,
                     role: node.role,
                     testID: node.testID,
                     text: text,
@@ -204,7 +204,7 @@ public enum LoupeObservationCompactor {
                 LoupeInteractiveElement(
                     ref: node.ref,
                     typeName: node.typeName,
-                    className: node.uiKit?.className,
+                    className: node.platform?.className,
                     role: node.role,
                     text: interactiveDisplayText(for: node, screenRect: screenRect),
                     testID: node.testID,
@@ -226,7 +226,7 @@ public enum LoupeObservationCompactor {
                 LoupeVisualSurface(
                     ref: node.ref,
                     typeName: node.typeName,
-                    className: node.uiKit?.className,
+                    className: node.platform?.className,
                     frameworkBundleIdentifier: node.runtime?.frameworkBundleIdentifier,
                     testID: node.testID,
                     frame: node.frame,
@@ -464,12 +464,13 @@ public enum LoupeObservationCompactor {
 
     private static func isWebContentSurface(_ node: LoupeNode) -> Bool {
         node.role == "webView"
-            || node.uiKit?.webView != nil
+            || node.platform?.webView != nil
             || node.runtime?.frameworkBundleIdentifier == "com.apple.WebKit"
     }
 
     private static func isSwiftUIHostingSurface(_ node: LoupeNode) -> Bool {
-        node.runtime?.frameworkBundleIdentifier == "com.apple.SwiftUI"
+        node.swiftui?.origin == "host"
+            || node.runtime?.frameworkBundleIdentifier == "com.apple.SwiftUI"
     }
 
     private static func suppressesSystemChromeSemanticDuplicateText(
@@ -535,13 +536,13 @@ public enum LoupeObservationCompactor {
     }
 
     private static func isPublicInteractiveControl(_ node: LoupeNode) -> Bool {
-        if node.uiKit?.button != nil
-            || node.uiKit?.switchControl != nil
-            || node.uiKit?.slider != nil
-            || node.uiKit?.stepper != nil
-            || node.uiKit?.segmentedControl != nil
-            || node.uiKit?.textField != nil
-            || node.uiKit?.textView != nil {
+        if node.platform?.button != nil
+            || node.platform?.switchControl != nil
+            || node.platform?.slider != nil
+            || node.platform?.stepper != nil
+            || node.platform?.segmentedControl != nil
+            || node.platform?.textField != nil
+            || node.platform?.textView != nil {
             return true
         }
         return node.role == "cell"
@@ -553,7 +554,7 @@ public enum LoupeObservationCompactor {
               node.role == "button",
               node.accessibility?.isElement != true,
               displayText(for: node) == nil,
-              node.uiKit?.userInteractionEnabled == false,
+              node.platform?.userInteractionEnabled == false,
               hasAncestorRole("cell", node, in: snapshot),
               hasImageDescendant(node, in: snapshot) else {
             return false
@@ -577,7 +578,7 @@ public enum LoupeObservationCompactor {
             guard let child = snapshot.nodes[ref] else {
                 return false
             }
-            if (child.role == "image" || child.uiKit?.imageView != nil), displayText(for: child) == nil {
+            if (child.role == "image" || child.platform?.imageView != nil), displayText(for: child) == nil {
                 return true
             }
             return hasImageDescendant(child, in: snapshot)

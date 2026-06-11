@@ -473,9 +473,8 @@ Current benchmark status:
   clipping, truncation, or typography rules.
 - Compact observations expose UIKit identity, but component-specific properties
   intentionally require `loupe ui node`.
-- `loupe ui node` returns `UIView`-common properties at `uiKit` top level and
-  component-specific properties under nested objects such as `uiKit.stepper`,
-  `uiKit.textField`, `uiKit.tabBar`, and `uiKit.webView`.
+- `loupe ui node` returns platform properties under `uikit` or `appkit`, with
+  nested component properties such as `uikit.textField` and `uikit.webView`.
 - Retry policies beyond explicit wait commands are not implemented yet.
 - Native `UIAccessibility` traversal is opt-in and still needs guardrails before
   it can be part of the default runtime endpoint.
@@ -483,7 +482,8 @@ Current benchmark status:
 - Native HID dispatch covers tap, drag, swipe, and US-keyboard text input.
 - SwiftUI movement/input selectors are intentionally limited to elements exposed
   through the accessibility tree. Loupe does not synthesize selectors from
-  private SwiftUI view-tree implementation details.
+  private SwiftUI view-tree implementation details. Snapshots may include a
+  bounded `swiftui` summary, but not raw private hierarchy.
 - Runtime mutation is strongest for text, color, visibility, layer styling, and
   control values. Frame, constraint, and list self-sizing edits are diagnostic
   unless the effective state confirms UIKit kept them.

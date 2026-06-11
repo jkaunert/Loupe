@@ -51,6 +51,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             navigationController.pushViewController(BottomSheetFixtureViewController(), animated: false)
         case "fixtures":
             navigationController.pushViewController(FixtureTabController(), animated: false)
+        case "fixtures.swiftui":
+            navigationController.pushViewController(FixtureTabController(initialSelectedIndex: 0), animated: false)
         case "fixtures.web":
             navigationController.pushViewController(FixtureTabController(initialSelectedIndex: 1), animated: false)
         case "fixtures.keyboard":

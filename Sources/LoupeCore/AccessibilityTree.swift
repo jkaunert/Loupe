@@ -163,8 +163,8 @@ public struct LoupeAccessibilityTree: Codable, Equatable {
                 isVisible: isVisible(source, in: snapshot, visibilityMode: visibilityMode, surfaceVisibleRefs: surfaceVisibleRefs),
                 isEnabled: source.isEnabled,
                 isInteractive: source.isInteractive || (accessibility?.traits.contains("button") ?? false),
-                isFocused: source.uiKit?.isFocused,
-                canBecomeFocused: source.uiKit?.canBecomeFocused,
+                isFocused: source.platform?.isFocused,
+                canBecomeFocused: source.platform?.canBecomeFocused,
                 children: []
             )
 

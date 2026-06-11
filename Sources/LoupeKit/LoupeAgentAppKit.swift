@@ -651,11 +651,31 @@ public final class LoupeAgent {
         viewRefs[ObjectIdentifier(view)] = ref
         viewsByRef[ref] = view
 
-        let childRefs = view.subviews.map {
+        var childRefs = view.subviews.map {
             captureView($0, parentRef: ref, window: window, nodes: &nodes, viewRefs: &viewRefs, viewsByRef: &viewsByRef)
         }
         let testID = nonEmpty(view.identifier?.rawValue) ?? stringMetadata("id", from: view.loupeMetadata)
         let customMetadata = mergedMetadata(view.loupeMetadata, with: runtime.metadata(forTestID: testID))
+        let runtimeProperties = runtimeProperties(for: view)
+        let appKitProperties = appKitProperties(for: view)
+        let swiftUIProperties = loupeSwiftUIProperties(
+            backingTypeName: typeName(of: view),
+            frameworkBundleIdentifier: runtimeProperties.frameworkBundleIdentifier,
+            viewController: appKitProperties.viewController,
+            customMetadata: customMetadata,
+            privateSummary: loupeSwiftUIPrivateSummary(from: view)
+        )
+
+        if let swiftUIProperties {
+            childRefs.append(
+                contentsOf: captureSwiftUISemanticChildren(
+                    in: view,
+                    parentRef: ref,
+                    hostProperties: swiftUIProperties,
+                    nodes: &nodes
+                )
+            )
+        }
 
         nodes[ref] = LoupeNode(
             ref: ref,
@@ -676,12 +696,106 @@ public final class LoupeAgent {
             isInteractive: isInteractive(view),
             style: style(for: view),
             accessibility: accessibility(for: view),
-            runtime: runtimeProperties(for: view),
-            uiKit: appKitProperties(for: view),
+            runtime: runtimeProperties,
+            appkit: appKitProperties,
+            swiftui: swiftUIProperties,
             custom: customMetadata,
             children: childRefs
         )
         return ref
+    }
+
+    private func captureSwiftUISemanticChildren(
+        in view: NSView,
+        parentRef: String,
+        hostProperties: LoupeSwiftUIProperties,
+        nodes: inout [String: LoupeNode]
+    ) -> [String] {
+        var visitedContainers = Set<ObjectIdentifier>()
+        var signatures = Set<String>()
+        var refs: [String] = []
+
+        for element in nativeAccessibilityElements(in: view, visitedContainers: &visitedContainers) {
+            if element is NSView {
+                continue
+            }
+            guard let element = element as? NSAccessibilityElement,
+                  let node = swiftUISemanticNode(
+                    for: element,
+                    parentRef: parentRef,
+                    hostProperties: hostProperties
+                  ) else {
+                continue
+            }
+            let signature = loupeSwiftUISemanticSignature(for: node)
+            guard signatures.insert(signature).inserted else {
+                continue
+            }
+            nodes[node.ref] = node
+            refs.append(node.ref)
+        }
+
+        return refs
+    }
+
+    private func swiftUISemanticNode(
+        for element: NSAccessibilityElement,
+        parentRef: String,
+        hostProperties: LoupeSwiftUIProperties
+    ) -> LoupeNode? {
+        let testID = nonEmpty(element.accessibilityIdentifier())
+        let label = nonEmpty(element.accessibilityLabel())
+        let value = accessibilityValueString(for: element)
+        let hint = nonEmpty(element.accessibilityHelp())
+        let role = accessibilityRoleName(for: element)
+        let traits = role.map { [$0] } ?? []
+        let frame = loupeRect(fromScreenRect: element.accessibilityFrame())
+        let activationPoint = validActivationPoint(
+            loupePoint(fromScreenPoint: element.accessibilityActivationPoint()),
+            frame: frame
+        )
+
+        guard testID != nil || label != nil || value != nil || hint != nil || !traits.isEmpty else {
+            return nil
+        }
+
+        return LoupeNode(
+            ref: makeRef(),
+            parentRef: parentRef,
+            kind: .view,
+            typeName: loupeSwiftUISemanticTypeName(role: role, traits: traits),
+            role: role,
+            testID: testID,
+            label: label,
+            value: value,
+            text: label ?? value,
+            semanticText: label ?? value,
+            frame: frame,
+            isVisible: !frame.isEmpty && intersectsScreen(frame, screen: currentAppKitScreenSize()),
+            isEnabled: element.isAccessibilityEnabled(),
+            isInteractive: isInteractiveAccessibilityRole(role),
+            accessibility: LoupeAccessibility(
+                identifier: testID,
+                label: label,
+                value: value,
+                hint: hint,
+                traits: traits,
+                frame: frame,
+                activationPoint: activationPoint,
+                isElement: true
+            ),
+            runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.SwiftUI"),
+            swiftui: loupeSwiftUISemanticProperties(
+                backingTypeName: loupeSwiftUISemanticTypeName(role: role, traits: traits),
+                hostTypeName: hostProperties.backingTypeName,
+                viewController: hostProperties.viewController
+            ),
+            custom: [
+                "synthetic": .bool(true),
+                "observationBackend": .string("native-accessibility"),
+                "sourceRef": .string(parentRef),
+            ]
+        )
     }
 
     private func makeRef() -> String {
@@ -733,10 +847,10 @@ private var viewMutationDescriptors: [LoupeMutationDescriptor] {
         mutation(["bounds"]) { view, value in
             view.bounds = nsRect(try rectValue(value))
         },
-        mutation(["alpha", "style.alpha", "appKit.alpha"]) { view, value in
+        mutation(["alpha", "style.alpha", "appkit.alpha"]) { view, value in
             view.alphaValue = CGFloat(try doubleValue(value))
         },
-        mutation(["hidden", "isHidden", "appKit.isHidden"]) { view, value in
+        mutation(["hidden", "isHidden", "appkit.isHidden"]) { view, value in
             view.isHidden = try boolValue(value)
         },
         mutation(["backgroundColor", "style.backgroundColor"]) { view, value in
@@ -820,7 +934,7 @@ private var accessibilityMutationDescriptors: [LoupeMutationDescriptor] {
 @MainActor
 private var textMutationDescriptors: [LoupeMutationDescriptor] {
     [
-        mutation(["text", "label.text", "textField.text", "appKit.text"]) { view, value in
+        mutation(["text", "label.text", "textField.text", "appkit.text"]) { view, value in
             try setText(try stringValue(value), on: view)
         },
         mutation(["title", "button.title"]) { view, value in
@@ -847,7 +961,7 @@ private var controlMutationDescriptors: [LoupeMutationDescriptor] {
             }
             control.isEnabled = try boolValue(value)
         },
-        mutation(["segmentedControl.selectedSegmentIndex", "appKit.segmentedControl.selectedSegmentIndex"]) { view, value in
+        mutation(["segmentedControl.selectedSegmentIndex", "appkit.segmentedControl.selectedSegmentIndex"]) { view, value in
             guard let control = view as? NSSegmentedControl else {
                 throw unsupportedProperty("segmentedControl.selectedSegmentIndex", view: view)
             }
@@ -857,49 +971,49 @@ private var controlMutationDescriptors: [LoupeMutationDescriptor] {
             }
             control.selectedSegment = index
         },
-        mutation(["slider.value", "appKit.slider.value", "uiKit.slider.value"]) { view, value in
+        mutation(["slider.value", "appkit.slider.value", "uikit.slider.value"]) { view, value in
             guard let slider = view as? NSSlider else {
                 throw unsupportedProperty("slider.value", view: view)
             }
             slider.doubleValue = try doubleValue(value)
         },
-        mutation(["slider.minimumValue", "appKit.slider.minimumValue", "uiKit.slider.minimumValue"]) { view, value in
+        mutation(["slider.minimumValue", "appkit.slider.minimumValue", "uikit.slider.minimumValue"]) { view, value in
             guard let slider = view as? NSSlider else {
                 throw unsupportedProperty("slider.minimumValue", view: view)
             }
             slider.minValue = try doubleValue(value)
         },
-        mutation(["slider.maximumValue", "appKit.slider.maximumValue", "uiKit.slider.maximumValue"]) { view, value in
+        mutation(["slider.maximumValue", "appkit.slider.maximumValue", "uikit.slider.maximumValue"]) { view, value in
             guard let slider = view as? NSSlider else {
                 throw unsupportedProperty("slider.maximumValue", view: view)
             }
             slider.maxValue = try doubleValue(value)
         },
-        mutation(["stepper.value", "appKit.stepper.value", "uiKit.stepper.value"]) { view, value in
+        mutation(["stepper.value", "appkit.stepper.value", "uikit.stepper.value"]) { view, value in
             guard let stepper = view as? NSStepper else {
                 throw unsupportedProperty("stepper.value", view: view)
             }
             stepper.doubleValue = try doubleValue(value)
         },
-        mutation(["stepper.minimumValue", "appKit.stepper.minimumValue", "uiKit.stepper.minimumValue"]) { view, value in
+        mutation(["stepper.minimumValue", "appkit.stepper.minimumValue", "uikit.stepper.minimumValue"]) { view, value in
             guard let stepper = view as? NSStepper else {
                 throw unsupportedProperty("stepper.minimumValue", view: view)
             }
             stepper.minValue = try doubleValue(value)
         },
-        mutation(["stepper.maximumValue", "appKit.stepper.maximumValue", "uiKit.stepper.maximumValue"]) { view, value in
+        mutation(["stepper.maximumValue", "appkit.stepper.maximumValue", "uikit.stepper.maximumValue"]) { view, value in
             guard let stepper = view as? NSStepper else {
                 throw unsupportedProperty("stepper.maximumValue", view: view)
             }
             stepper.maxValue = try doubleValue(value)
         },
-        mutation(["stepper.stepValue", "appKit.stepper.stepValue", "uiKit.stepper.stepValue"]) { view, value in
+        mutation(["stepper.stepValue", "appkit.stepper.stepValue", "uikit.stepper.stepValue"]) { view, value in
             guard let stepper = view as? NSStepper else {
                 throw unsupportedProperty("stepper.stepValue", view: view)
             }
             stepper.increment = try doubleValue(value)
         },
-        mutation(["progressView.progress", "progressView.value", "appKit.progressView.value", "uiKit.progressView.value"]) { view, value in
+        mutation(["progressView.progress", "progressView.value", "appkit.progressView.value", "uikit.progressView.value"]) { view, value in
             guard let progress = view as? NSProgressIndicator else {
                 throw unsupportedProperty("progressView.progress", view: view)
             }
@@ -966,7 +1080,6 @@ private func applyMutation(
 private func normalizedMutationProperty(_ property: String) -> String {
     property
         .trimmingCharacters(in: .whitespacesAndNewlines)
-        .replacingOccurrences(of: "appKit.", with: "appkit.")
         .lowercased()
 }
 
@@ -1042,7 +1155,7 @@ private func mutationAncestorSummaries(from parent: LoupeNode?, snapshot: LoupeS
 private func mutationNodeSummary(_ node: LoupeNode) -> LoupeMutationNodeSummary {
     LoupeMutationNodeSummary(
         ref: node.ref,
-        typeName: node.uiKit?.className ?? node.typeName,
+        typeName: node.platform?.className ?? node.typeName,
         role: node.role,
         testID: node.testID,
         text: LoupeObservationCompactor.displayText(for: node),
@@ -1087,41 +1200,41 @@ private func mutationPropertyValue(_ property: String, in node: LoupeNode) -> Lo
     case "accessibility.identifier", "accessibilityidentifier", "testid":
         return node.accessibility?.identifier.map(LoupeMutationValue.string) ?? node.testID.map(LoupeMutationValue.string)
     case "layout.translatesautoresizingmaskintoconstraints", "translatesautoresizingmaskintoconstraints":
-        return node.uiKit?.layout.map { .bool($0.translatesAutoresizingMaskIntoConstraints) }
+        return node.platform?.layout.map { .bool($0.translatesAutoresizingMaskIntoConstraints) }
     case "layout.isambiguouslayout", "isambiguouslayout":
-        return node.uiKit?.layout.map { .bool($0.isAmbiguousLayout) }
+        return node.platform?.layout.map { .bool($0.isAmbiguousLayout) }
     case "layout.hugging.horizontal":
-        return node.uiKit?.layout.map { .double($0.hugging.horizontal) }
+        return node.platform?.layout.map { .double($0.hugging.horizontal) }
     case "layout.hugging.vertical":
-        return node.uiKit?.layout.map { .double($0.hugging.vertical) }
+        return node.platform?.layout.map { .double($0.hugging.vertical) }
     case "layout.compressionresistance.horizontal":
-        return node.uiKit?.layout.map { .double($0.compressionResistance.horizontal) }
+        return node.platform?.layout.map { .double($0.compressionResistance.horizontal) }
     case "layout.compressionresistance.vertical":
-        return node.uiKit?.layout.map { .double($0.compressionResistance.vertical) }
+        return node.platform?.layout.map { .double($0.compressionResistance.vertical) }
     case "contentoffset", "scrollview.contentoffset":
-        return node.uiKit?.scrollView.map { .point($0.contentOffset) }
+        return node.platform?.scrollView.map { .point($0.contentOffset) }
     case "stack.orientation", "stackview.orientation", "stack.axis", "stackview.axis":
-        return node.uiKit?.stackView.map { .string($0.axis) }
+        return node.platform?.stackView.map { .string($0.axis) }
     case "stack.spacing", "stackview.spacing":
-        return node.uiKit?.stackView.map { .double($0.spacing) }
+        return node.platform?.stackView.map { .double($0.spacing) }
     case "segmentedcontrol.selectedsegmentindex", "appkit.segmentedcontrol.selectedsegmentindex":
-        return node.uiKit?.segmentedControl?.selectedSegmentIndex.map(LoupeMutationValue.int)
+        return node.platform?.segmentedControl?.selectedSegmentIndex.map(LoupeMutationValue.int)
     case "slider.value", "appkit.slider.value", "uikit.slider.value":
-        return node.uiKit?.slider?.value.map(LoupeMutationValue.double)
+        return node.platform?.slider?.value.map(LoupeMutationValue.double)
     case "slider.minimumvalue", "appkit.slider.minimumvalue", "uikit.slider.minimumvalue":
-        return node.uiKit?.slider?.minimumValue.map(LoupeMutationValue.double)
+        return node.platform?.slider?.minimumValue.map(LoupeMutationValue.double)
     case "slider.maximumvalue", "appkit.slider.maximumvalue", "uikit.slider.maximumvalue":
-        return node.uiKit?.slider?.maximumValue.map(LoupeMutationValue.double)
+        return node.platform?.slider?.maximumValue.map(LoupeMutationValue.double)
     case "stepper.value", "appkit.stepper.value", "uikit.stepper.value":
-        return node.uiKit?.stepper?.value.map(LoupeMutationValue.double)
+        return node.platform?.stepper?.value.map(LoupeMutationValue.double)
     case "stepper.minimumvalue", "appkit.stepper.minimumvalue", "uikit.stepper.minimumvalue":
-        return node.uiKit?.stepper?.minimumValue.map(LoupeMutationValue.double)
+        return node.platform?.stepper?.minimumValue.map(LoupeMutationValue.double)
     case "stepper.maximumvalue", "appkit.stepper.maximumvalue", "uikit.stepper.maximumvalue":
-        return node.uiKit?.stepper?.maximumValue.map(LoupeMutationValue.double)
+        return node.platform?.stepper?.maximumValue.map(LoupeMutationValue.double)
     case "stepper.stepvalue", "appkit.stepper.stepvalue", "uikit.stepper.stepvalue":
-        return node.uiKit?.stepper?.stepValue.map(LoupeMutationValue.double)
+        return node.platform?.stepper?.stepValue.map(LoupeMutationValue.double)
     case "progressview.progress", "progressview.value", "appkit.progressview.value", "uikit.progressview.value":
-        return node.uiKit?.progressView?.value.map(LoupeMutationValue.double)
+        return node.platform?.progressView?.value.map(LoupeMutationValue.double)
     default:
         return nil
     }
@@ -1344,31 +1457,33 @@ private func runtimeProperties(for view: NSView) -> LoupeNodeRuntimeProperties {
 }
 
 @MainActor
-private func appKitProperties(for view: NSView) -> LoupeUIKitProperties {
-    LoupeUIKitProperties(
-        className: typeName(of: view),
-        tag: view.tag,
-        alpha: finiteDouble(view.alphaValue) ?? 0,
-        isHidden: view.isHidden,
-        isOpaque: view.isOpaque,
-        clipsToBounds: view.layer?.masksToBounds ?? false,
-        userInteractionEnabled: isInteractive(view),
-        gestureRecognizers: view.gestureRecognizers.map { typeName(of: $0) },
-        isFirstResponder: view.window?.firstResponder === view,
-        isFocused: view.window?.firstResponder === view,
-        canBecomeFocused: view.acceptsFirstResponder,
-        layout: layoutProperties(for: view),
-        stackView: stackViewProperties(for: view),
-        control: controlProperties(for: view),
-        label: labelProperties(for: view),
-        button: buttonProperties(for: view),
-        textField: textFieldProperties(for: view),
-        scrollView: scrollViewProperties(for: view),
-        slider: sliderProperties(for: view),
-        stepper: stepperProperties(for: view),
-        segmentedControl: segmentedControlProperties(for: view),
-        progressView: progressViewProperties(for: view),
-        imageView: imageViewProperties(for: view)
+private func appKitProperties(for view: NSView) -> LoupeAppKitProperties {
+    LoupeAppKitProperties(
+        storage: LoupeUIKitProperties(
+            className: typeName(of: view),
+            tag: view.tag,
+            alpha: finiteDouble(view.alphaValue) ?? 0,
+            isHidden: view.isHidden,
+            isOpaque: view.isOpaque,
+            clipsToBounds: view.layer?.masksToBounds ?? false,
+            userInteractionEnabled: isInteractive(view),
+            gestureRecognizers: view.gestureRecognizers.map { typeName(of: $0) },
+            isFirstResponder: view.window?.firstResponder === view,
+            isFocused: view.window?.firstResponder === view,
+            canBecomeFocused: view.acceptsFirstResponder,
+            layout: layoutProperties(for: view),
+            stackView: stackViewProperties(for: view),
+            control: controlProperties(for: view),
+            label: labelProperties(for: view),
+            button: buttonProperties(for: view),
+            textField: textFieldProperties(for: view),
+            scrollView: scrollViewProperties(for: view),
+            slider: sliderProperties(for: view),
+            stepper: stepperProperties(for: view),
+            segmentedControl: segmentedControlProperties(for: view),
+            progressView: progressViewProperties(for: view),
+            imageView: imageViewProperties(for: view)
+        )
     )
 }
 
@@ -1994,6 +2109,11 @@ private func validActivationPoint(_ point: LoupePoint?, frame: LoupeRect?) -> Lo
 
 private func intersectsScreen(_ frame: LoupeRect, screen: LoupeSize) -> Bool {
     frame.maxX > 0 && frame.maxY > 0 && frame.x < screen.width && frame.y < screen.height
+}
+
+private func currentAppKitScreenSize() -> LoupeSize {
+    let frame = NSScreen.main?.frame ?? .zero
+    return LoupeSize(width: Double(frame.width), height: Double(frame.height))
 }
 
 private func nativeAccessibilitySignature(for node: LoupeAccessibilityNode) -> String {

@@ -992,6 +992,8 @@ final class FixtureTabController: UITabBarController {
 struct SwiftUIFixtureView: View {
     @State private var enabled = true
     @State private var value = 0.35
+    @State private var count = 2
+    @State private var mode = "Focus"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -999,17 +1001,20 @@ struct SwiftUIFixtureView: View {
                 .font(.title2.weight(.semibold))
                 .accessibilityIdentifier("example.fixtures.swiftui.title")
 
-            Toggle("Enabled", isOn: $enabled)
-                .accessibilityIdentifier("example.fixtures.swiftui.toggle")
-
-            Slider(value: $value)
-                .accessibilityIdentifier("example.fixtures.swiftui.slider")
+            SwiftUIFixtureControls(
+                enabled: $enabled,
+                value: $value,
+                count: $count,
+                mode: $mode
+            )
 
             Button(enabled ? "Disable" : "Enable") {
                 enabled.toggle()
             }
             .buttonStyle(.borderedProminent)
             .accessibilityIdentifier("example.fixtures.swiftui.button")
+
+            SwiftUIFixtureRows()
 
             Spacer()
         }
@@ -1018,6 +1023,61 @@ struct SwiftUIFixtureView: View {
         .background(Color(.systemBackground))
         .accessibilityIdentifier("example.fixtures.swiftui")
         .localLoupeProbe("example.fixtures.swiftui.probe", label: "iOS SwiftUI probe")
+    }
+}
+
+private struct SwiftUIFixtureControls: View {
+    @Binding var enabled: Bool
+    @Binding var value: Double
+    @Binding var count: Int
+    @Binding var mode: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle("Enabled", isOn: $enabled)
+                .accessibilityIdentifier("example.fixtures.swiftui.toggle")
+
+            Slider(value: $value)
+                .accessibilityIdentifier("example.fixtures.swiftui.slider")
+
+            Picker("Mode", selection: $mode) {
+                Text("Focus").tag("Focus")
+                Text("Review").tag("Review")
+                Text("Ship").tag("Ship")
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("example.fixtures.swiftui.mode")
+
+            Stepper("Priority \(count)", value: $count, in: 1...5)
+                .accessibilityIdentifier("example.fixtures.swiftui.stepper")
+
+            ProgressView(value: value)
+                .accessibilityIdentifier("example.fixtures.swiftui.progress")
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("example.fixtures.swiftui.controls")
+        .localLoupeProbe("example.fixtures.swiftui.controls", label: "iOS SwiftUI controls")
+    }
+}
+
+private struct SwiftUIFixtureRows: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(1...3, id: \.self) { index in
+                HStack(spacing: 8) {
+                    Image(systemName: index == 1 ? "checkmark.circle" : "circle")
+                    Text("SwiftUI row \(index)")
+                }
+                .padding(.vertical, 4)
+                .accessibilityIdentifier("example.fixtures.swiftui.row.\(index)")
+                .localLoupeProbe("example.fixtures.swiftui.row.\(index)", label: "iOS SwiftUI row \(index)")
+            }
+        }
+        .padding(12)
+        .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("example.fixtures.swiftui.rows")
+        .localLoupeProbe("example.fixtures.swiftui.rows", label: "iOS SwiftUI rows")
     }
 }
 
@@ -1039,6 +1099,7 @@ private struct LoupeFallbackProbeView: UIViewRepresentable {
         view.isAccessibilityElement = true
         view.accessibilityLabel = label ?? id
         view.backgroundColor = .clear
+        publishSwiftUIMetadata(for: view)
         return view
     }
 
@@ -1047,6 +1108,19 @@ private struct LoupeFallbackProbeView: UIViewRepresentable {
         uiView.isAccessibilityElement = true
         uiView.accessibilityLabel = label ?? id
         uiView.backgroundColor = .clear
+        publishSwiftUIMetadata(for: uiView)
+    }
+
+    private func publishSwiftUIMetadata(for view: UIView) {
+        NotificationCenter.default.post(
+            name: Notification.Name("dev.loupe.viewMetadata"),
+            object: view,
+            userInfo: [
+                "metadata": [
+                    "loupe.swiftUI": true,
+                ],
+            ]
+        )
     }
 }
 

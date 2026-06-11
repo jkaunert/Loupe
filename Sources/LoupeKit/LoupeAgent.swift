@@ -164,7 +164,7 @@ public final class LoupeAgent {
                     point: point,
                     hitRef: ref,
                     hitTestID: node?.testID,
-                    hitTypeName: node?.uiKit?.className ?? node?.typeName ?? typeName(of: view),
+                    hitTypeName: node?.platform?.className ?? node?.typeName ?? typeName(of: view),
                     responderChain: buildResponderChain(from: view, capture: capture)
                 )
             }
@@ -189,7 +189,7 @@ public final class LoupeAgent {
                 point: match.frame?.center ?? LoupePoint(x: 0, y: 0),
                 hitRef: match.ref,
                 hitTestID: match.testID,
-                hitTypeName: node?.uiKit?.className ?? node?.typeName ?? typeName(of: view),
+                hitTypeName: node?.platform?.className ?? node?.typeName ?? typeName(of: view),
                 responderChain: buildResponderChain(from: view, capture: capture)
             )
         }
@@ -245,7 +245,7 @@ public final class LoupeAgent {
             style: style(for: window),
             accessibility: accessibility(for: window),
             runtime: runtimeProperties(for: window),
-            uiKit: uiKitProperties(for: window),
+            uikit: uiKitProperties(for: window),
             custom: window.loupeMetadata,
             children: childRefs
         )
@@ -302,6 +302,27 @@ public final class LoupeAgent {
         let testID = view.accessibilityIdentifier ?? stringMetadata("id", from: view.loupeMetadata)
         let customMetadata = mergedMetadata(view.loupeMetadata, with: runtime.metadata(forTestID: testID))
         let accessibility = accessibility(for: view)
+        let runtimeProperties = runtimeProperties(for: view)
+        let uiKitProperties = uiKitProperties(for: view)
+        let swiftUIProperties = loupeSwiftUIProperties(
+            backingTypeName: typeName(of: view),
+            frameworkBundleIdentifier: runtimeProperties.frameworkBundleIdentifier,
+            viewController: uiKitProperties.viewController,
+            customMetadata: customMetadata,
+            privateSummary: loupeSwiftUIPrivateSummary(from: view)
+        )
+
+        if let swiftUIProperties {
+            childRefs.append(
+                contentsOf: captureSwiftUISemanticChildren(
+                    in: view,
+                    parentRef: ref,
+                    hostProperties: swiftUIProperties,
+                    inheritedVisible: visible,
+                    nodes: &nodes
+                )
+            )
+        }
 
         nodes[ref] = LoupeNode(
             ref: ref,
@@ -322,13 +343,117 @@ public final class LoupeAgent {
             isInteractive: isInteractive(view),
             style: style(for: view),
             accessibility: accessibility,
-            runtime: runtimeProperties(for: view),
-            uiKit: uiKitProperties(for: view),
+            runtime: runtimeProperties,
+            uikit: uiKitProperties,
+            swiftui: swiftUIProperties,
             custom: customMetadata,
             children: childRefs
         )
 
         return ref
+    }
+
+    private func captureSwiftUISemanticChildren(
+        in view: UIView,
+        parentRef: String,
+        hostProperties: LoupeSwiftUIProperties,
+        inheritedVisible: Bool,
+        nodes: inout [String: LoupeNode]
+    ) -> [String] {
+        var visitedContainers = Set<ObjectIdentifier>()
+        var signatures = Set<String>()
+        var refs: [String] = []
+
+        for element in nativeAccessibilityElements(in: view, visitedContainers: &visitedContainers) {
+            if element is UIView {
+                continue
+            }
+            guard let node = swiftUISemanticNode(
+                for: element,
+                parentRef: parentRef,
+                hostProperties: hostProperties,
+                inheritedVisible: inheritedVisible
+            ) else {
+                continue
+            }
+            let signature = loupeSwiftUISemanticSignature(for: node)
+            guard signatures.insert(signature).inserted else {
+                continue
+            }
+            nodes[node.ref] = node
+            refs.append(node.ref)
+        }
+
+        return refs
+    }
+
+    private func swiftUISemanticNode(
+        for element: NSObject,
+        parentRef: String,
+        hostProperties: LoupeSwiftUIProperties,
+        inheritedVisible: Bool
+    ) -> LoupeNode? {
+        let testID = accessibilityIdentifier(for: element)
+        let label = nonEmpty(element.accessibilityLabel)
+        let value = nonEmpty(element.accessibilityValue)
+        let hint = nonEmpty(element.accessibilityHint)
+        let traits = accessibilityTraits(element.accessibilityTraits)
+        let role = accessibilityRole(forTraits: traits)
+        let frame = loupeRect(from: element.accessibilityFrame)
+        let activationPoint = validActivationPoint(
+            LoupePoint(
+                x: finiteDouble(Double(element.accessibilityActivationPoint.x)) ?? 0,
+                y: finiteDouble(Double(element.accessibilityActivationPoint.y)) ?? 0
+            ),
+            frame: frame
+        )
+
+        guard testID != nil || label != nil || value != nil || hint != nil || !traits.isEmpty else {
+            return nil
+        }
+
+        let isVisible = inheritedVisible
+            && !element.accessibilityElementsHidden
+            && !frame.isEmpty
+        let isInteractive = isInteractiveAccessibilityTraits(traits)
+
+        return LoupeNode(
+            ref: makeRef(),
+            parentRef: parentRef,
+            kind: .view,
+            typeName: loupeSwiftUISemanticTypeName(role: role, traits: traits),
+            role: role,
+            testID: testID,
+            label: label,
+            value: value,
+            text: label ?? value,
+            semanticText: label ?? value,
+            frame: frame,
+            isVisible: isVisible,
+            isEnabled: !traits.contains("notEnabled"),
+            isInteractive: isInteractive,
+            accessibility: LoupeAccessibility(
+                identifier: testID,
+                label: label,
+                value: value,
+                hint: hint,
+                traits: traits,
+                frame: frame,
+                activationPoint: activationPoint,
+                isElement: true
+            ),
+            runtime: LoupeNodeRuntimeProperties(frameworkBundleIdentifier: "com.apple.SwiftUI"),
+            swiftui: loupeSwiftUISemanticProperties(
+                backingTypeName: loupeSwiftUISemanticTypeName(role: role, traits: traits),
+                hostTypeName: hostProperties.backingTypeName,
+                viewController: hostProperties.viewController
+            ),
+            custom: [
+                "synthetic": .bool(true),
+                "observationBackend": .string("native-accessibility"),
+                "sourceRef": .string(parentRef),
+            ]
+        )
     }
 
     private func captureNativeAccessibilityTree(

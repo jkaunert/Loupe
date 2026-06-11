@@ -175,6 +175,22 @@ import SwiftUI
         #expect(node.custom["observationBackend"] == .string("registered-probes"))
     }
 
+    @Test func swiftUIPrivateReflectionExtractsMeaningfulSummary() {
+        struct ProfileView {
+            var enabled = true
+            var mode = "Save"
+        }
+        final class FixtureHost: NSObject {
+            let rootView = ProfileView()
+        }
+
+        let summary = loupeSwiftUIPrivateSummary(from: FixtureHost())
+
+        #expect(summary?.rootTypeName == "ProfileView")
+        #expect(summary?.properties.contains { $0.name == "enabled" && $0.value == .bool(true) } == true)
+        #expect(summary?.properties.contains { $0.name == "mode" && $0.value == .string("Save") } == true)
+    }
+
     @MainActor
     @Test func runtimeReferenceEvidenceKeepsMostRecentFiveHundredEntries() {
         let runtime = LoupeRuntime()
@@ -275,7 +291,7 @@ import SwiftUI
         let snapshot = agent.captureSnapshot()
         let probe = try #require(snapshot.nodes.values.first { $0.testID == fixture.probeTestID })
 
-        #expect(probe.uiKit?.className == "NSView")
+        #expect(probe.platform?.className == "NSView")
         #expect(probe.custom["loupe.probe"] == .bool(true))
         let frame = try #require(probe.frame)
         #expect(frame.width > 100)
@@ -336,7 +352,7 @@ import SwiftUI
         #expect(buttonNode.typeName == "NSButton")
         #expect(buttonNode.isInteractive == true)
         #expect(buttonNode.text == "Run")
-        let buttonLayout = try #require(buttonNode.uiKit?.layout)
+        let buttonLayout = try #require(buttonNode.platform?.layout)
         #expect(buttonLayout.hugging.horizontal > 0)
         #expect(buttonLayout.hugging.vertical > 0)
         #expect(buttonLayout.compressionResistance.horizontal > 0)
@@ -345,19 +361,19 @@ import SwiftUI
         #expect(buttonNode.custom["runtimeTag"] == .string("posted-by-test-id"))
         #expect(buttonNode.custom["priority"] == .int(7))
         #expect(segmentedNode.role == "segmentedControl")
-        #expect(segmentedNode.uiKit?.segmentedControl?.selectedSegmentIndex == 1)
-        #expect(segmentedNode.uiKit?.segmentedControl?.segments == ["One", "Two"])
+        #expect(segmentedNode.platform?.segmentedControl?.selectedSegmentIndex == 1)
+        #expect(segmentedNode.platform?.segmentedControl?.segments == ["One", "Two"])
         #expect(sliderNode.role == "slider")
-        #expect(sliderNode.uiKit?.slider?.value == 25)
-        #expect(sliderNode.uiKit?.slider?.minimumValue == 0)
-        #expect(sliderNode.uiKit?.slider?.maximumValue == 50)
+        #expect(sliderNode.platform?.slider?.value == 25)
+        #expect(sliderNode.platform?.slider?.minimumValue == 0)
+        #expect(sliderNode.platform?.slider?.maximumValue == 50)
         #expect(stepperNode.role == "stepper")
-        #expect(stepperNode.uiKit?.stepper?.value == 4)
-        #expect(stepperNode.uiKit?.stepper?.stepValue == 2)
+        #expect(stepperNode.platform?.stepper?.value == 4)
+        #expect(stepperNode.platform?.stepper?.stepValue == 2)
         #expect(progressNode.role == "progress")
-        #expect(progressNode.uiKit?.progressView?.value == 0.75)
+        #expect(progressNode.platform?.progressView?.value == 0.75)
         #expect(imageNode.role == "image")
-        #expect(imageNode.uiKit?.imageView?.imageSize == LoupeSize(width: 18, height: 18))
+        #expect(imageNode.platform?.imageView?.imageSize == LoupeSize(width: 18, height: 18))
         #expect(customAXTextNode.typeName == "AccessibilityRoleTextView")
         #expect(customAXTextNode.role == "staticText")
         #expect(customAXTextNode.semanticText == "Custom accessible text")

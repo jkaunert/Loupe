@@ -298,7 +298,7 @@ public enum LoupeLayoutAuditor {
               LoupeObservationCompactor.displayText(for: node) != nil else {
             return false
         }
-        return node.uiKit?.label != nil || node.uiKit?.textField != nil
+        return node.platform?.label != nil || node.platform?.textField != nil
     }
 
     private static func hasOversizedAppleStaticTextFrame(_ node: LoupeNode) -> Bool {
@@ -381,7 +381,7 @@ public enum LoupeLayoutAuditor {
         screenFrame: LoupeRect
     ) -> Bool {
         guard isScrollContainer(scrollNode),
-              let scrollView = scrollNode.uiKit?.scrollView,
+              let scrollView = scrollNode.platform?.scrollView,
               let scrollFrame = scrollNode.frame,
               let overlayFrame = overlayNode.frame,
               let clippedScrollFrame = clipped(scrollFrame, to: screenFrame),
@@ -423,7 +423,7 @@ public enum LoupeLayoutAuditor {
     }
 
     private static func isImageNode(_ node: LoupeNode) -> Bool {
-        node.role == "image" || node.uiKit?.imageView != nil
+        node.role == "image" || node.platform?.imageView != nil
     }
 
     private static func isLoupeProbe(_ node: LoupeNode) -> Bool {
@@ -498,7 +498,7 @@ public enum LoupeLayoutAuditor {
     }
 
     private static func isScrollContainer(_ node: LoupeNode) -> Bool {
-        if node.uiKit?.scrollView != nil || node.uiKit?.collectionView != nil || node.uiKit?.tableView != nil {
+        if node.platform?.scrollView != nil || node.platform?.collectionView != nil || node.platform?.tableView != nil {
             return true
         }
         switch node.role {
@@ -513,7 +513,7 @@ public enum LoupeLayoutAuditor {
         guard isAppleRuntime(node) else {
             return false
         }
-        let className = node.uiKit?.className ?? node.typeName
+        let className = node.platform?.className ?? node.typeName
         return className.hasPrefix("_UIFloatingContent") || className.hasPrefix("_UIFocus")
     }
 
@@ -521,7 +521,7 @@ public enum LoupeLayoutAuditor {
         guard isAppleRuntime(node) else {
             return false
         }
-        let className = node.uiKit?.className ?? node.typeName
+        let className = node.platform?.className ?? node.typeName
         return className.hasPrefix("_UIText")
             || className.hasPrefix("_UICursor")
             || className == "UIStandardTextCursorView"
@@ -547,10 +547,10 @@ public enum LoupeLayoutAuditor {
         if isSystemTabBarItem(node, in: snapshot) {
             return false
         }
-        if node.testID == nil, node.uiKit?.segmentedControl != nil {
+        if node.testID == nil, node.platform?.segmentedControl != nil {
             return false
         }
-        if node.testID == nil, node.uiKit?.textField != nil {
+        if node.testID == nil, node.platform?.textField != nil {
             return false
         }
         if isPassiveImageElement(node) {
@@ -560,10 +560,10 @@ public enum LoupeLayoutAuditor {
     }
 
     private static func isPassiveImageElement(_ node: LoupeNode) -> Bool {
-        let controlEvents = node.uiKit?.control?.controlEvents ?? []
-        let gestureRecognizers = node.uiKit?.gestureRecognizers ?? []
+        let controlEvents = node.platform?.control?.controlEvents ?? []
+        let gestureRecognizers = node.platform?.gestureRecognizers ?? []
         let hasImageSemantics = node.role == "image"
-            || node.uiKit?.imageView != nil
+            || node.platform?.imageView != nil
             || node.accessibility?.traits.contains("image") == true
         return hasImageSemantics
             && node.testID == nil
@@ -587,7 +587,7 @@ public enum LoupeLayoutAuditor {
             return true
         }
         if hasAncestorRole("tabBar", node, in: snapshot),
-           node.role == "button" || node.uiKit?.control != nil {
+           node.role == "button" || node.platform?.control != nil {
             return true
         }
         return false
@@ -651,14 +651,14 @@ public enum LoupeLayoutAuditor {
     private static func isTextFieldPlaceholderLabel(_ node: LoupeNode, in snapshot: LoupeSnapshot) -> Bool {
         guard node.testID == nil,
               node.role == "staticText",
-              node.uiKit?.label != nil else {
+              node.platform?.label != nil else {
             return false
         }
 
         guard let parentRef = node.parentRef, let parent = snapshot.nodes[parentRef] else {
             return false
         }
-        guard parent.role == "textField" || parent.uiKit?.textField != nil else {
+        guard parent.role == "textField" || parent.platform?.textField != nil else {
             return false
         }
 
@@ -669,13 +669,13 @@ public enum LoupeLayoutAuditor {
         guard isAppleRuntime(node),
               node.testID == nil,
               node.role == "staticText",
-              node.uiKit?.label != nil,
+              node.platform?.label != nil,
               node.accessibility?.isElement != true,
               !node.isInteractive,
               let parentRef = node.parentRef,
               let parent = snapshot.nodes[parentRef],
               isAppleRuntime(parent),
-              parent.uiKit?.button != nil,
+              parent.platform?.button != nil,
               let nodeText = LoupeObservationCompactor.displayText(for: node),
               let parentText = LoupeObservationCompactor.displayText(for: parent),
               nodeText == parentText else {
@@ -862,7 +862,7 @@ public enum LoupeLayoutAuditor {
     }
 
     private static func isIntentionalOverlayOverlapNode(_ node: LoupeNode) -> Bool {
-        node.uiKit?.viewControllerRole == "alert"
+        node.platform?.viewControllerRole == "alert"
     }
 
     private static func activeModalOverlayRefs(in snapshot: LoupeSnapshot, screenFrame: LoupeRect) -> Set<String> {
@@ -875,7 +875,7 @@ public enum LoupeLayoutAuditor {
     }
 
     private static func isActiveModalOverlayNode(_ node: LoupeNode) -> Bool {
-        node.uiKit?.viewControllerRole == "alert"
+        node.platform?.viewControllerRole == "alert"
     }
 
     private static func containsActiveModalOverlayDescendant(
@@ -1028,7 +1028,7 @@ public enum LoupeLayoutAuditor {
               node.role == "button",
               node.accessibility?.isElement != true,
               LoupeObservationCompactor.displayText(for: node) == nil,
-              node.uiKit?.userInteractionEnabled == false,
+              node.platform?.userInteractionEnabled == false,
               hasAncestorRole("cell", node, in: snapshot),
               hasImageDescendant(node, in: snapshot) else {
             return false
@@ -1037,13 +1037,13 @@ public enum LoupeLayoutAuditor {
     }
 
     private static func isPublicInteractiveUIKitElement(_ node: LoupeNode) -> Bool {
-        if node.uiKit?.button != nil
-            || node.uiKit?.switchControl != nil
-            || node.uiKit?.slider != nil
-            || node.uiKit?.stepper != nil
-            || node.uiKit?.segmentedControl != nil
-            || node.uiKit?.textField != nil
-            || node.uiKit?.textView != nil {
+        if node.platform?.button != nil
+            || node.platform?.switchControl != nil
+            || node.platform?.slider != nil
+            || node.platform?.stepper != nil
+            || node.platform?.segmentedControl != nil
+            || node.platform?.textField != nil
+            || node.platform?.textView != nil {
             return true
         }
         return node.role == "cell"

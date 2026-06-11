@@ -171,7 +171,7 @@ import Testing
             isVisible: true,
             isEnabled: true,
             isInteractive: true,
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: "UISearchBarTextField",
                 tag: 0,
                 alpha: 1,
@@ -195,7 +195,7 @@ import Testing
             isVisible: true,
             isEnabled: true,
             isInteractive: true,
-            uiKit: LoupeUIKitProperties(
+            uikit: LoupeUIKitProperties(
                 className: "UITabBar",
                 tag: 0,
                 alpha: 1,

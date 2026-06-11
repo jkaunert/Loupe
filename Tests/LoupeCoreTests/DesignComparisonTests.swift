@@ -47,7 +47,7 @@ struct DesignComparisonTests {
                     isEnabled: true,
                     isInteractive: true,
                     style: LoupeStyle(backgroundColor: LoupeColor(red: 0.2, green: 0.78, blue: 0.35, alpha: 1)),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UISwitch",
                         tag: 0,
                         alpha: 1,
@@ -1739,7 +1739,7 @@ struct DesignComparisonTests {
                     isEnabled: true,
                     isInteractive: true,
                     style: LoupeStyle(cornerRadius: 0),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UISwitch",
                         tag: 0,
                         alpha: 1,
@@ -2065,7 +2065,7 @@ struct DesignComparisonTests {
                         fontSize: 13,
                         textColor: LoupeColor(red: 0.42745098, green: 0.462745098, blue: 0.517647059, alpha: 1)
                     ),
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "NSTextField",
                         tag: 0,
                         alpha: 1,

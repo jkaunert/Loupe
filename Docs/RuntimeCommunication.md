@@ -85,3 +85,8 @@ movement/input targets only when they are exposed through the accessibility tree
 If a SwiftUI `.accessibilityIdentifier(...)` is not visible through the runtime
 accessibility tree, Loupe will not invent a selector for it from private SwiftUI
 implementation views.
+
+View snapshots may still mark existing host, rendered, or probe-backed nodes
+with a bounded `swiftui` summary. That summary is metadata only: origin,
+backing view/controller evidence, optional root type, and scalar properties.
+Loupe intentionally does not emit raw private SwiftUI hierarchy.

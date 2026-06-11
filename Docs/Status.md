@@ -109,6 +109,8 @@ clipping, and UIKit metadata.
   view-derived accessibility tree.
 - SwiftUI movement/input selectors depend on elements exposed through the
   accessibility tree. Loupe does not synthesize private SwiftUI view selectors.
+  Snapshots may include a bounded `swiftui` summary, but not raw private
+  hierarchy.
 - Screenshot baseline diffing is not implemented yet.
 - Layout audit is useful for obvious issues, but it does not yet fully encode
   spacing, alignment, typography, z-order intent, clipping, or truncation rules.

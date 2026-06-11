@@ -674,7 +674,7 @@ extension LoupeCLI {
             throw CLIError("loupe debug scroll expected exactly one scroll target, found \(matches.count)")
         }
         guard let beforeNode = beforeSnapshot.nodes[target.ref],
-              let beforeOffset = beforeNode.uiKit?.scrollView?.contentOffset else {
+              let beforeOffset = beforeNode.platform?.scrollView?.contentOffset else {
             throw CLIError("loupe debug scroll target is not a captured scroll view: \(target.testID ?? target.ref)")
         }
 
@@ -694,7 +694,7 @@ extension LoupeCLI {
         let responseData = try await postRuntimeJSON(request, path: "mutate", options: options.runtimeOptions)
         let response = try diagnosticJSONDecoder().decode(LoupeMutationResponse.self, from: responseData)
         let elapsed = Date().timeIntervalSince(startedAt)
-        guard let afterOffset = response.after.uiKit?.scrollView?.contentOffset else {
+        guard let afterOffset = response.after.platform?.scrollView?.contentOffset else {
             throw CLIError("loupe debug scroll mutation response did not include an after scroll offset")
         }
 
@@ -761,8 +761,8 @@ extension LoupeCLI {
         let before = try decodeDiagnosticSnapshot(from: beforeURL)
         let after = try decodeDiagnosticSnapshot(from: afterURL)
         for (ref, beforeNode) in before.nodes {
-            guard let beforeOffset = beforeNode.uiKit?.scrollView?.contentOffset,
-                  let afterOffset = after.nodes[ref]?.uiKit?.scrollView?.contentOffset,
+            guard let beforeOffset = beforeNode.platform?.scrollView?.contentOffset,
+                  let afterOffset = after.nodes[ref]?.platform?.scrollView?.contentOffset,
                   beforeOffset != afterOffset else {
                 continue
             }

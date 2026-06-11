@@ -56,7 +56,7 @@ struct ScreenMapperTests {
                     isVisible: true,
                     isEnabled: true,
                     isInteractive: true,
-                    uiKit: LoupeUIKitProperties(
+                    uikit: LoupeUIKitProperties(
                         className: "UIButton",
                         tag: 0,
                         alpha: 1,

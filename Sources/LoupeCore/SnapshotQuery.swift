@@ -347,7 +347,7 @@ public enum LoupeSnapshotQuery {
         if suppressesSystemChromeSemanticDuplicateText(node, in: snapshot, screenRect: screenRect) {
             return true
         }
-        if node.uiKit?.scrollView != nil {
+        if node.platform?.scrollView != nil {
             return true
         }
         switch node.role?.lowercased() {

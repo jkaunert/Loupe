@@ -89,7 +89,7 @@ struct CaptureReportAuditIssue: Codable, Equatable {
         testID = issue.testID
         text = node.flatMap(LoupeObservationCompactor.displayText)
         typeName = node?.typeName
-        className = node?.uiKit?.className
+        className = node?.platform?.className
         frame = node?.frame
         message = issue.message
     }

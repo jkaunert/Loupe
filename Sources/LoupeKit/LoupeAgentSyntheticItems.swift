@@ -150,7 +150,7 @@ func syntheticBarButtonNode(
             activationPoint: frame.map { LoupePoint(x: $0.x + $0.width / 2, y: $0.y + $0.height / 2) },
             isElement: true
         ),
-        uiKit: LoupeUIKitProperties(
+        uikit: LoupeUIKitProperties(
             className: className,
             tag: matchedView?.tag ?? 0,
             alpha: matchedView.flatMap { finiteDouble($0.alpha.doubleValue) } ?? 1,
@@ -216,7 +216,7 @@ func syntheticTabBarItemNode(
             activationPoint: frame.map { LoupePoint(x: $0.x + $0.width / 2, y: $0.y + $0.height / 2) },
             isElement: true
         ),
-        uiKit: LoupeUIKitProperties(
+        uikit: LoupeUIKitProperties(
             className: className,
             tag: matchedView?.tag ?? item.tag,
             alpha: matchedView.flatMap { finiteDouble($0.alpha.doubleValue) } ?? 1,

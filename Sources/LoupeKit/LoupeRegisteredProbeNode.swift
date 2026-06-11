@@ -35,6 +35,11 @@ func loupeRegisteredProbeNode(
             activationPoint: probe.frame?.center,
             isElement: true
         ),
+        swiftui: loupeSwiftUIProperties(
+            backingTypeName: "LoupeRegisteredProbe",
+            frameworkBundleIdentifier: nil,
+            customMetadata: custom
+        ),
         custom: custom
     )
 }

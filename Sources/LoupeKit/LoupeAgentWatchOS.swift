@@ -25,6 +25,7 @@ public final class LoupeAgent {
         let parentRefs = probeParentRefs(probes: probes, refs: probeRefs, appRef: appRef)
         for (index, probe) in probes.enumerated() {
             let ref = "n\(index + 1)"
+            let customMetadata = mergedMetadata(probe.metadata, with: runtime.metadata(forTestID: probe.id))
             nodes[ref] = LoupeNode(
                 ref: ref,
                 parentRef: parentRefs[ref] ?? appRef,
@@ -46,7 +47,12 @@ public final class LoupeAgent {
                     activationPoint: probe.frame?.center,
                     isElement: true
                 ),
-                custom: mergedMetadata(probe.metadata, with: runtime.metadata(forTestID: probe.id))
+                swiftui: loupeSwiftUIProperties(
+                    backingTypeName: "LoupeWatchProbe",
+                    frameworkBundleIdentifier: nil,
+                    customMetadata: customMetadata
+                ),
+                custom: customMetadata
             )
         }
 
